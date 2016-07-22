@@ -17,6 +17,7 @@ library
   hs-source-dirs:      src
   exposed-modules:     SlitherBot.Protocol
                      , SlitherBot.Proxy
+                     , SlitherBot.GameState
   default-language:    Haskell2010
   build-depends:       base
                      , cereal
@@ -26,6 +27,9 @@ library
                      , websockets
                      , network-uri
                      , async
+                     , containers
+                     , unordered-containers
+                     , hashable
   ghc-options:         -Wall
   default-language:    Haskell2010
 

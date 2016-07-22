@@ -5,6 +5,7 @@ module SlitherBot.Protocol
   ( NewFood(..)
   , LeaderSnake(..)
   , Config(..)
+  , SnakeId(..)
   , defaultConfig
   , ServerMessage(..)
   , parseServerMessage
@@ -17,6 +18,9 @@ import qualified Data.ByteString.Char8 as BSC8
 import           Control.Monad.Loops (whileM)
 import           Data.Bits (shiftL, (.|.))
 import           Data.Char (chr)
+
+newtype SnakeId = SnakeId {unSnakeId :: Word16}
+  deriving (Eq, Show)
 
 data NewFood = NewFood
     { newFoodID :: !Double -- ID?
@@ -60,6 +64,18 @@ defaultConfig = Config
   , cst = 0.43
   , protocol_version = 2
   }
+
+{-
+data ServerMessage = ServerMessage
+  { smTimeSinceLastMessage :: !Word16
+  , smMessageType :: !MessageType
+  , smSnakeId :: !Word16
+  } deriving (Eq, Show)
+
+data MessageType
+  = MTSetup
+  | MT
+-}
 
 data ServerMessage
   = Setup Config
