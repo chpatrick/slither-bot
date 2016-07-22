@@ -29,8 +29,8 @@ newtype SnakeId = SnakeId {unSnakeId :: Word16}
   deriving (Eq, Show, Hashable)
 
 data Position = Position
-  { posX :: !Int64
-  , posY :: !Int64
+  { posX :: !Double
+  , posY :: !Double
   } deriving (Eq, Show, Generic)
 instance Hashable Position
 
@@ -97,7 +97,9 @@ data MessageType
   | MTRemoveLastPart !RemoveLastPart
   | MTMoveSnake !MoveSnake
   | MTIncreaseSnake !IncreaseSnake
-  | MTUnhandled Char
+  | MTUnhandled !Char
+  | MTAddSnake !AddSnake
+  | MTRemoveSnake !RemoveSnake
   | MTGameOver
   deriving (Eq, Show)
 
@@ -118,6 +120,27 @@ data IncreaseSnake = IncreaseSnake
   , isPosition :: !Position
   , isNewFam :: !Fam
   } deriving (Eq, Show)
+
+data AddSnake =
+  AddSnake
+  { asSnakeId :: !SnakeId
+  , asEhangWehang :: !Double
+  , asAngle :: !Double
+  , asSpeed :: !Double
+  , asFam :: !Double
+  , asSkin :: !Word8
+  , asPosition :: !Position
+  , asName :: !String
+  , asBody :: ![Position]
+  }
+  deriving (Eq, Show)
+
+data RemoveSnake
+  = RemoveSnake
+    { rsSnakeId :: !SnakeId
+    , rsDied :: !Bool
+    }
+  deriving (Eq, Show)
 
 {-
 data ServerMessage
