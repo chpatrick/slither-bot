@@ -310,6 +310,11 @@ getPosition8 = do
   y <- w8
   return (Position x y)
 
+getFam :: Get Fam
+getFam = do
+  fam24 <- w24
+  return (fam24 / 16777215)
+
 getMessageType :: Int -> Get MessageType
 getMessageType inputLength = do
   msgHeader <- chr <$> w8
@@ -388,7 +393,7 @@ getMessageType inputLength = do
           return (RemoveLastPart snakeId Nothing)
         8 -> do
           snakeId <- getSnakeId
-          newFam <- w24
+          newFam <- getFam
           return (RemoveLastPart snakeId (Just newFam))
         size -> do
           unexpectedInputSize size
@@ -404,12 +409,12 @@ getMessageType inputLength = do
     'n' -> do
       snakeId <- getSnakeId
       position <- getPosition16
-      newFam <- w24
+      newFam <- getFam
       return (MTIncreaseSnake (IncreaseSnake snakeId False position newFam))
     'N' -> do
       snakeId <- getSnakeId
       position <- getPosition8
-      newFam <- w24
+      newFam <- getFam
       return (MTIncreaseSnake (IncreaseSnake snakeId True position newFam))
     'v' -> do -- game over
       unknown <- getWord8
