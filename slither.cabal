@@ -13,9 +13,26 @@ build-type:          Simple
 -- extra-source-files:
 cabal-version:       >=1.10
 
-executable slither-exe
+library
   hs-source-dirs:      src
-  main-is:             Main.hs
+  exposed-modules:     SlitherBot.Protocol
+                     , SlitherBot.Proxy
+  default-language:    Haskell2010
+  build-depends:       base
+                     , cereal
+                     , classy-prelude
+                     , bytestring
+                     , monad-loops
+                     , websockets
+                     , network-uri
+                     , async
+  ghc-options:         -Wall
+  default-language:    Haskell2010
+
+executable slither-exe
+  hs-source-dirs:      app
+  main-is:             slither-proxy.hs
+  ghc-options:         -Wall
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
-  build-depends:       base, mtl, text, websockets, network, bytestring, random, cereal, monad-loops, network-uri, async
+  build-depends:       base, slither
   default-language:    Haskell2010
