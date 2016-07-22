@@ -89,7 +89,6 @@ type Direction = Double
 data ServerMessage = ServerMessage
   { smTimeSinceLastMessage :: !Word16
   , smMessageType :: !MessageType
-  , smSnakeId :: !Word16
   } deriving (Eq, Show)
 
 data MessageType
@@ -290,7 +289,7 @@ getServerMessage :: Int -> Setup -> Get ServerMessage
 getServerMessage inputLength _ = do
   timeSinceLastMessage <- getWord16be
   messageType <- getMessageType inputLength
-  return (ServerMessage timeSinceLastMessage messageType (error "nope"))
+  return (ServerMessage timeSinceLastMessage messageType)
 
 unexpectedInputSize :: Monad m => Int -> m a
 unexpectedInputSize size = fail ("Unexpected input size " ++ show size)
@@ -416,6 +415,8 @@ getMessageType inputLength = do
       position <- getPosition8
       newFam <- getFam
       return (MTIncreaseSnake (IncreaseSnake snakeId True position newFam))
+    -- 's' -> do
+
     'v' -> do -- game over
       unknown <- getWord8
       dbg "mystery code" unknown
