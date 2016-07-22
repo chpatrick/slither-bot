@@ -11,6 +11,7 @@ module SlitherBot.Protocol
   , Fam
   , Position(..)
   , MessageType(..)
+  , RemoveLastPart(..)
   , Direction
   ) where
 
@@ -91,10 +92,15 @@ data ServerMessage = ServerMessage
 
 data MessageType
   = MTSetup !Setup
-  | MTRemoveLastPart !SnakeId
+  | MTRemoveLastPart !RemoveLastPart
   | MTMoveSnake !MoveSnake
   | MTIncreaseSnake !IncreaseSnake
   deriving (Eq, Show)
+
+data RemoveLastPart = RemoveLastPart
+  { rlpSnakeId :: !SnakeId
+  , rlpNewFam :: !(Maybe Fam)
+  } deriving (Eq, Show)
 
 data MoveSnake = MoveSnake
   { msSnakeId :: !SnakeId
