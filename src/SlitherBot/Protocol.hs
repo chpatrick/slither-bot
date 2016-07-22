@@ -16,6 +16,7 @@ module SlitherBot.Protocol
   , Direction
   , MoveSnake(..)
   , IncreaseSnake(..)
+  , RemoveSnake(..)
   ) where
 
 import           ClassyPrelude

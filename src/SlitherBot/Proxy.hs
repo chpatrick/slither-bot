@@ -6,9 +6,9 @@ import           ClassyPrelude
 import qualified Network.WebSockets  as WS
 import           Network.URI (parseURI, URI(..), URIAuth(..))
 import qualified Data.ByteString.Char8 as BSC8
-import           Control.Concurrent.Async (race)
 
 import           SlitherBot.Protocol
+import           SlitherBot.GameState
 
 proxy :: Int -> IO ()
 proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
@@ -26,26 +26,28 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
       -- strip the Sec-WebSocket-Key header
       let headers = filter (\( header, _ ) -> header /= "Sec-WebSocket-Key") (WS.requestHeaders reqHead)
 
-      configVar <- newMVar defaultSetup
+      gameStateVar <- newMVar defaultGameState
 
       -- make the equivalent connection to the server
       WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
         let clientToServer = forever $ do
+              -- putStrLn "Sending data..."
               msg <- WS.receiveData clientConn
               WS.sendBinaryData serverConn (msg :: BSC8.ByteString)
-        let serverToClient = forever $ do 
+        let serverToClient = forever $ do
               msg <- WS.receiveData serverConn
               WS.sendBinaryData clientConn msg
-              modifyMVar_ configVar $ \cfg -> do
-                case parseServerMessage cfg msg of
+              modifyMVar_ gameStateVar $ \gameState -> do
+                case parseServerMessage (gsSetup gameState) msg of
                   Left err -> do
                     putStrLn $ "Couldn't parse " ++ tshow msg ++ ": " ++ pack err
-                    return cfg
+                    return gameState
                   Right serverMsg -> do
-                    print serverMsg
-                    return $ case smMessageType serverMsg of
-                      MTSetup newCfg -> newCfg
-                      _ -> cfg
+                    putStrLn ("SERVER " ++ tshow serverMsg)
+                    case updateGameState gameState serverMsg of
+                      Left err -> fail ("Couldn't update game state: " ++ err)
+                      Right Nothing -> return gameState
+                      Right (Just gameState') -> return gameState'
         fmap (either id id) (race clientToServer serverToClient)
     Just _ -> WS.rejectRequest pendingConn "Could not parse URI"
     Nothing -> WS.rejectRequest pendingConn "Could not parse URI"

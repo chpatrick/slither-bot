@@ -33,7 +33,7 @@ library
   ghc-options:         -Wall
   default-language:    Haskell2010
 
-executable slither-exe
+executable slither-proxy
   hs-source-dirs:      app
   main-is:             slither-proxy.hs
   ghc-options:         -Wall

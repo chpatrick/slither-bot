@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module SlitherBot.GameState
   ( GameState(..)
+  , defaultGameState
   , Snake(..)
   , SnakeBody
   , updateGameState
@@ -14,10 +15,12 @@ import qualified Data.Sequence as Seq
 import           SlitherBot.Protocol
 
 data GameState = GameState
-  { gsOurSnake :: !SnakeId
-  , gsSnakes :: !(HMS.HashMap SnakeId Snake)
+  { gsSnakes :: !(HMS.HashMap SnakeId Snake)
   , gsSetup :: !Setup
   } deriving (Eq, Show)
+
+defaultGameState :: GameState
+defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup }
 
 data Snake = Snake
   { snakePosition :: !Position
@@ -70,7 +73,9 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     return (Just gs{gsSnakes = HMS.insert isSnakeId snake' gsSnakes})
   MTGameOver -> return Nothing
   MTUnhandled _ -> return (Just gs)
+  MTAddSnake as -> traceShow as (return (Just gs))
+  MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of
-      Nothing -> Left ("Could not find SnakeId " ++ show snakeId)
+      Nothing -> Left ("Could not find snake " ++ show snakeId)
       Just snake -> Right snake
