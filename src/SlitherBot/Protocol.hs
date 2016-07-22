@@ -1,14 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE DeriveGeneric #-}
 module SlitherBot.Protocol
-  ( NewFood(..)
-  , LeaderSnake(..)
-  , Config(..)
+  ( Setup(..)
   , SnakeId(..)
-  , defaultConfig
+  , defaultSetup
   , ServerMessage(..)
   , parseServerMessage
+  , Fam
+  , Position(..)
+  , MessageType(..)
+  , Direction
   ) where
 
 import           ClassyPrelude
@@ -22,6 +25,13 @@ import           Data.Char (chr)
 newtype SnakeId = SnakeId {unSnakeId :: Word16}
   deriving (Eq, Show)
 
+data Position = Position
+  { posX :: !Int64
+  , posY :: !Int64
+  } deriving (Eq, Show, Generic)
+instance Hashable Position
+
+{-
 data NewFood = NewFood
     { newFoodID :: !Double -- ID?
     , newFoodX :: !Double -- X coordinate
@@ -35,37 +45,44 @@ data NewFood = NewFood
 data LeaderSnake = LeaderSnake
   { leaderName :: !BSC8.ByteString
   } deriving (Eq, Show)
+-}
 
-data Config = Config
-  { grd :: !Word
-  , sector_size :: !Double
-  , sector_count_along_edge :: !Word16
-  , spangdv :: !Double
-  , nsp1 :: !Double
-  , nsp2 :: !Double
-  , nsp3 :: !Double
-  , mamu :: !Double
-  , mamu2 :: !Double
-  , cst :: !Double
-  , protocol_version :: !Word8
+data Setup = Setup
+  { setupGrid :: !Int64
+  , setupMscps :: !Int64
+  , setupSectorSize :: !Int64
+  , setupSectorCountAlongEdge :: !Int64
+  , setupSpangdv :: !Double
+  , setupNsp1 :: !Double
+  , setupNsp2 :: !Double
+  , setupNsp3 :: !Double
+  , setupMamu :: !Double
+  , setupMamu2 :: !Double
+  , setupCst :: !Double
+  , setupProtocol :: !Word8
   } deriving (Eq, Ord, Show)
 
-defaultConfig :: Config
-defaultConfig = Config
-  { grd = 16384
-  , sector_size = 480
-  , sector_count_along_edge = 130
-  , spangdv = 4.8
-  , nsp1 = 4.25
-  , nsp2 = 0.5
-  , nsp3 = 12
-  , mamu  = 0.033
-  , mamu2 = 0.28
-  , cst = 0.43
-  , protocol_version = 2
+defaultSetup :: Setup
+defaultSetup = Setup
+  { setupGrid = 21600
+  , setupMscps = 411
+  , setupSectorSize = 480
+  , setupSectorCountAlongEdge = 130
+  , setupSpangdv = 4.8
+  , setupNsp1 = 4.25
+  , setupNsp2 = 0.5
+  , setupNsp3 = 12
+  , setupMamu = 0.033
+  , setupMamu2 = 0.028
+  , setupCst = 0.43
+  , setupProtocol = 8 
   }
 
-{-
+type Fam = Double
+
+-- Clockwise radians from looking north
+type Direction = Double
+
 data ServerMessage = ServerMessage
   { smTimeSinceLastMessage :: !Word16
   , smMessageType :: !MessageType
@@ -73,10 +90,26 @@ data ServerMessage = ServerMessage
   } deriving (Eq, Show)
 
 data MessageType
-  = MTSetup
-  | MT
--}
+  = MTSetup !Setup
+  | MTRemoveLastPart
+  | MTMoveSnake !MoveSnake
+  | MTIncreaseSnake !IncreaseSnake
+  deriving (Eq, Show)
 
+data MoveSnake = MoveSnake
+  { msSnakeId :: !SnakeId
+  , msRelative :: !Bool
+  , msPosition :: !Position
+  } deriving (Eq, Show)
+
+data IncreaseSnake = IncreaseSnake
+  { isSnakeId :: !SnakeId
+  , isRelative :: !Bool
+  , isPosition :: !Position
+  , isNewFam :: !Fam
+  } deriving (Eq, Show)
+
+{-
 data ServerMessage
   = Setup Config
   | NewFoods [ NewFood ]
@@ -215,3 +248,7 @@ getServerMessage Config{..} = do
 
 parseServerMessage :: Config -> ByteString -> Either String ServerMessage
 parseServerMessage cfg = runGet (getServerMessage cfg)
+-}
+
+parseServerMessage :: Setup -> ByteString -> Either String ServerMessage
+parseServerMessage = error "TODO"

@@ -26,7 +26,7 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
       -- strip the Sec-WebSocket-Key header
       let headers = filter (\( header, _ ) -> header /= "Sec-WebSocket-Key") (WS.requestHeaders reqHead)
 
-      configVar <- newMVar defaultConfig
+      configVar <- newMVar defaultSetup
 
       -- make the equivalent connection to the server
       WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
@@ -43,8 +43,8 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
                     return cfg
                   Right serverMsg -> do
                     print serverMsg
-                    return $ case serverMsg of
-                      Setup newCfg -> newCfg
+                    return $ case smMessageType serverMsg of
+                      MTSetup newCfg -> newCfg
                       _ -> cfg
         fmap (either id id) (race clientToServer serverToClient)
     Just _ -> WS.rejectRequest pendingConn "Could not parse URI"
