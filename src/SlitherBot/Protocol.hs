@@ -79,7 +79,7 @@ defaultSetup = Setup
   , setupMamu = 0.033
   , setupMamu2 = 0.028
   , setupCst = 0.43
-  , setupProtocol = 8 
+  , setupProtocol = 8
   }
 
 type Fam = Double
@@ -98,6 +98,8 @@ data MessageType
   | MTRemoveLastPart !RemoveLastPart
   | MTMoveSnake !MoveSnake
   | MTIncreaseSnake !IncreaseSnake
+  | MTUnhandled Char
+  | MTGameOver
   deriving (Eq, Show)
 
 data RemoveLastPart = RemoveLastPart
@@ -128,7 +130,7 @@ data ServerMessage
     , statsSnakeCount :: !Word16
     , statsLeaderboard :: ![ LeaderSnake ]
     }
-  | OtherMessage 
+  | OtherMessage
     { msgC :: !Word16
     , msgHeader :: !Char
     , msgBody :: !BSC8.ByteString
@@ -137,21 +139,6 @@ data ServerMessage
 
 whileRemaining :: Get a -> Get [ a ]
 whileRemaining = whileM ((>0) <$> remaining)
-
-dbg :: (Monad m, Show a) => String -> a -> m ()
-dbg name val = traceM (name ++ ": " ++ show val)
-
-w8 :: Num a => Get a
-w8 = fromIntegral <$> getWord8
-
-w16 :: Num a => Get a
-w16 = fromIntegral <$> getWord16be
-
-w24 :: Num a => Get a
-w24 = do
-  msb <- w8
-  lsbs <- w16
-  return $ fromIntegral (((msb `shiftL` 16) .|. lsbs) :: Word)
 
 oldProtocol :: Get a
 oldProtocol = fail "Unsupported protocol version."
@@ -259,5 +246,137 @@ parseServerMessage :: Config -> ByteString -> Either String ServerMessage
 parseServerMessage cfg = runGet (getServerMessage cfg)
 -}
 
+w8 :: Num a => Get a
+w8 = fromIntegral <$> getWord8
+
+w16 :: Num a => Get a
+w16 = fromIntegral <$> getWord16be
+
+w24 :: Num a => Get a
+w24 = do
+  msb <- w8
+  lsbs <- w16
+  return $ fromIntegral (((msb `shiftL` 16) .|. lsbs) :: Word)
+
+dbg :: (Monad m, Show a) => String -> a -> m ()
+dbg name val = traceM (name ++ ": " ++ show val)
+
 parseServerMessage :: Setup -> ByteString -> Either String ServerMessage
-parseServerMessage = error "TODO"
+parseServerMessage setup input = runGet (getServerMessage (BSC8.length input) setup) input
+
+getServerMessage :: Int -> Setup -> Get ServerMessage
+getServerMessage inputLength _ = do
+  timeSinceLastMessage <- getWord16be
+  messageType <- getMessageType inputLength
+  return (ServerMessage timeSinceLastMessage messageType (error "nope"))
+
+unexpectedInputSize size = fail ("Unexpected input size " ++ show size)
+
+getSnakeId :: Get SnakeId
+getSnakeId = SnakeId <$> w16
+
+getMessageType :: Int -> Get MessageType
+getMessageType inputLength = do
+  msgHeader <- chr <$> w8
+  case msgHeader of
+    'a' -> do
+      grd <- w24
+      e <- w16
+      dbg "e" e
+      sector_size <- w16
+      sector_count_along_edge <- w16
+      spangdv <- (/10) <$> w8
+      nsp1 <- (/100) <$> w16
+      nsp2 <- (/100) <$> w16
+      nsp3 <- (/100) <$> w16
+      mamu <- (/1E3) <$> w16
+      mamu2 <- (/1E3) <$> w16
+      cst <- (/1E3) <$> w16
+      left <- remaining
+      protocol_version <-
+        if left > 0
+          then w8
+          else return $ case defaultSetup of
+            Setup { setupProtocol = defaultVersion } -> defaultVersion
+      let
+        setup =
+          Setup
+          { setupGrid = grd
+          , setupMscps = e
+          , setupSectorSize = sector_size
+          , setupSectorCountAlongEdge = sector_count_along_edge
+          , setupSpangdv = spangdv
+          , setupNsp1 = nsp1
+          , setupNsp2 = nsp2
+          , setupNsp3 = nsp3
+          , setupMamu = mamu
+          , setupMamu2 = mamu2
+          , setupCst = cst
+          , setupProtocol = protocol_version
+          }
+      return (MTSetup setup)
+    -- 'F' -> do -- new foods
+    --   if 4 <= protocol_version
+    --     then
+    --       fmap NewFoods $ whileRemaining $ do
+    --         newFoodColor <- getWord8
+    --         newFoodX <- w16
+    --         newFoodY <- w16
+    --         newFoodQ <- (/5) <$> w8
+    --         let newFoodID = newFoodY * fromIntegral grd * 3 + newFoodX
+    --         let newFoodSX = floor (newFoodX / sector_size)
+    --         let newFoodSY = floor (newFoodY / sector_size)
+    --         return NewFood{..}
+    --     else oldProtocol
+    -- 'l' -> do -- leaderboard
+    --   h <- getWord8
+    --   dbg "h" h
+    --   statsRank <- w16
+    --   statsSnakeCount <- w16
+    --   statsLeaderboard <- whileRemaining $ do
+    --     k <- w16
+    --     dbg "k" k
+    --     u <- (\w -> scaleFloat (-24) (fromIntegral w)) <$> w24
+    --     dbg "u" (u :: Double)
+    --     y <- (`mod`9) <$> getWord8
+    --     dbg "y" y
+    --     nameLength <- getWord8
+    --     name <- getByteString (fromIntegral nameLength)
+    --     return (LeaderSnake name)
+    --   bytesLeft <- remaining
+    --   msgBody <- getBytes bytesLeft
+    --   return Stats { .. }
+    'r' -> do
+      removeLastPart <- case inputLength of
+        5 -> do
+          snakeId <- getSnakeId
+          return (RemoveLastPart snakeId Nothing)
+        8 -> do
+          snakeId <- getSnakeId
+          newFam <- w24
+          return (RemoveLastPart snakeId (Just newFam))
+        size -> do
+          unexpectedInputSize size
+      return (MTRemoveLastPart removeLastPart)
+    'g' -> do
+      return (MTMoveSnake undefined)
+    'G' -> do
+      return (MTMoveSnake undefined)
+    'n' -> do
+      return (MTIncreaseSnake undefined)
+    'N' -> do
+      return (MTIncreaseSnake undefined)
+    'v' -> do -- game over
+      unknown <- getWord8
+      dbg "mystery code" unknown
+      return MTGameOver
+    other -> return (MTUnhandled other)
+
+    -- h | h `elem` ("eE345" :: String) -> do
+    --   t <- w16
+    --   e <- remaining
+    --   dbg "h" h
+    --   dbg "e" e
+    --   bytesLeft <- remaining
+    --   msgBody <- getBytes bytesLeft
+    --   return OtherMessage {..}
