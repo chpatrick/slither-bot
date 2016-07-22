@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module SlitherBot.Protocol
   ( Setup(..)
   , SnakeId(..)
@@ -13,6 +14,8 @@ module SlitherBot.Protocol
   , MessageType(..)
   , RemoveLastPart(..)
   , Direction
+  , MoveSnake(..)
+  , IncreaseSnake(..)
   ) where
 
 import           ClassyPrelude
@@ -24,7 +27,7 @@ import           Data.Bits (shiftL, (.|.))
 import           Data.Char (chr)
 
 newtype SnakeId = SnakeId {unSnakeId :: Word16}
-  deriving (Eq, Show)
+  deriving (Eq, Show, Hashable)
 
 data Position = Position
   { posX :: !Int64
