@@ -269,10 +269,10 @@ parseServerMessage cfg = runGet (getServerMessage cfg)
 -}
 
 w8 :: Num a => Get a
-w8 = fromIntegral <$> getWord8
+w8 = fromIntegral <$> getInt8
 
 w16 :: Num a => Get a
-w16 = fromIntegral <$> getWord16be
+w16 = fromIntegral <$> getInt16be
 
 w24 :: Num a => Get a
 w24 = do
@@ -450,15 +450,19 @@ getMessageType inputLength = do
               name <- getBytes nameLength
               tailPart <- getPosition5
               let
-                restLength = inputLength - 24 - nameLength - 6
+                restLength = inputLength - 25 - nameLength - 6
                 numberOfParts = restLength `div` 2
+              actuallyRemaining <- remaining
+              unless (restLength == actuallyRemaining) (fail ("Actually remaining no. of bytes(" ++ show actuallyRemaining ++ ") != expected no. of bytes(" ++ show restLength ++ ")"))
               unless (restLength >= 0) (fail ("Snake body length = " ++ show restLength ++ " < 0"))
-              unless (restLength `mod` 2 == 0) (fail ("Snake body length `mod` 2 = " ++ show restLength ++ " != 0"))
+              unless (restLength `mod` 2 == 0) (fail ("Snake body length(" ++ show restLength ++ ") `mod` 2 != 0"))
               relativePositions <- replicateM numberOfParts getPosition8
+              dbg "tailPart" tailPart
+              dbg "relativePositions" relativePositions
               let
                 toGlobalPositions _current acc [] = acc
                 toGlobalPositions current acc (relative : rest) =
-                  let nextPosition = Position (posX current + ((posX relative - 127) / 2)) (posY current + ((posY relative - 127) / 2))
+                  let nextPosition = Position (posX current + ((posX relative) / 2)) (posY current + ((posY relative) / 2))
                   in toGlobalPositions nextPosition (nextPosition : acc) rest
 
                 addSnake =
@@ -471,8 +475,8 @@ getMessageType inputLength = do
                   , asSkin = skin
                   , asPosition = position
                   , asName = name
-                  , asBody = toGlobalPositions tailPart relativePositions [tailPart]
-                  }             --
+                  , asBody = toGlobalPositions tailPart [tailPart] relativePositions
+                  }
               return (MTAddSnake addSnake)
           | otherwise -> do
               unexpectedInputSize other
