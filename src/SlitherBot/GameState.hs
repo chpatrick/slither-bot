@@ -29,14 +29,14 @@ data Snake = Snake
 -- TODO change this super slow data structure
 type SnakeBody = Seq.Seq Position
 
-updateGameState :: GameState -> ServerMessage -> Either String GameState
+updateGameState :: GameState -> ServerMessage -> Either String (Maybe GameState)
 updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
-  MTSetup setup -> Right gs{gsSetup = setup}
+  MTSetup setup -> Right (Just gs{gsSetup = setup})
   MTRemoveLastPart RemoveLastPart{..} -> do
     snake@Snake{..} <- getSnake rlpSnakeId
     case Seq.viewr snakeBody of
       Seq.EmptyR -> Left ("Cannot remove last part of empty snake " ++ show rlpSnakeId)
-      snakeBody' Seq.:> _ -> Right gs{gsSnakes = HMS.insert rlpSnakeId snake{snakeBody = snakeBody'} gsSnakes}
+      snakeBody' Seq.:> _ -> return (Just gs{gsSnakes = HMS.insert rlpSnakeId snake{snakeBody = snakeBody'} gsSnakes})
   MTMoveSnake MoveSnake{..} -> do
     snake@Snake{..} <- getSnake msSnakeId
     let snakeBody1 = case Seq.viewr snakeBody of
@@ -53,7 +53,7 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
           { snakePosition = absPosition
           , snakeBody = snakeBody2
           }
-    return gs{gsSnakes = HMS.insert msSnakeId snake' gsSnakes}
+    return (Just gs{gsSnakes = HMS.insert msSnakeId snake' gsSnakes})
   MTIncreaseSnake IncreaseSnake{..} -> do
     snake@Snake{..} <- getSnake isSnakeId
     let snakeBody' = snakePosition Seq.<| snakeBody
@@ -67,7 +67,9 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
           { snakePosition = absPosition
           , snakeBody = snakeBody'
           }
-    return gs{gsSnakes = HMS.insert isSnakeId snake' gsSnakes}
+    return (Just gs{gsSnakes = HMS.insert isSnakeId snake' gsSnakes})
+  MTGameOver -> return Nothing
+  MTUnhandled _ -> return (Just gs)
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of
       Nothing -> Left ("Could not find SnakeId " ++ show snakeId)
