@@ -129,7 +129,7 @@ data AddSnake =
   , asFam :: !Double
   , asSkin :: !Word8
   , asPosition :: !Position
-  , asName :: !String
+  , asName :: !ByteString
   , asBody :: ![Position]
   }
   deriving (Eq, Show)
@@ -309,10 +309,24 @@ getPosition8 = do
   y <- w8
   return (Position x y)
 
+getPosition5 :: Get Position
+getPosition5 = do
+  x <- w24
+  y <- w24
+  return (Position (x / 5) (y / 5))
+
+_MAGIC_NUMBER :: Double
+_MAGIC_NUMBER = 16777215
+
 getFam :: Get Fam
 getFam = do
   fam24 <- w24
-  return (fam24 / 16777215)
+  return (fam24 / _MAGIC_NUMBER)
+
+getAngle :: Get Double
+getAngle = do
+  angle24 <- w24
+  return (angle24 * 2 * pi / _MAGIC_NUMBER)
 
 getMessageType :: Int -> Get MessageType
 getMessageType inputLength = do
@@ -415,8 +429,52 @@ getMessageType inputLength = do
       position <- getPosition8
       newFam <- getFam
       return (MTIncreaseSnake (IncreaseSnake snakeId True position newFam))
-    -- 's' -> do
+    's' -> do
+      snakeId <- getSnakeId
+      case inputLength of
+        6 -> do
+          diedByte <- w8
+          return (MTRemoveSnake (RemoveSnake snakeId (diedByte == (1 :: Word8))))
+        other
+          | other >= 31 -> do
 
+              ehangWehang <- getAngle
+              _unused <- getWord8
+              angle <- getAngle
+              speed <- (/ 1e3) <$> w16
+              fam <- getFam
+              skin <- w8
+              position <- getPosition5
+              nameLength <- w8
+              name <- getBytes nameLength
+              tailPart <- getPosition5
+              let
+                restLength = inputLength - 24 - nameLength - 6
+                numberOfParts = restLength `div` 2
+              unless (restLength >= 0) (fail ("Snake body length = " ++ show restLength ++ " < 0"))
+              unless (restLength `mod` 2 == 0) (fail ("Snake body length `mod` 2 = " ++ show restLength ++ " != 0"))
+              relativePositions <- replicateM numberOfParts getPosition8
+              let
+                toGlobalPositions _current acc [] = acc
+                toGlobalPositions current acc (relative : rest) =
+                  let nextPosition = Position (posX current + ((posX relative - 127) / 2)) (posY current + ((posY relative - 127) / 2))
+                  in toGlobalPositions nextPosition (nextPosition : acc) rest
+
+                addSnake =
+                  AddSnake
+                  { asSnakeId = snakeId
+                  , asEhangWehang = ehangWehang
+                  , asAngle = angle
+                  , asSpeed = speed
+                  , asFam = fam
+                  , asSkin = skin
+                  , asPosition = position
+                  , asName = name
+                  , asBody = toGlobalPositions tailPart relativePositions [tailPart]
+                  }             --
+              return (MTAddSnake addSnake)
+          | otherwise -> do
+              unexpectedInputSize other
     'v' -> do -- game over
       unknown <- getWord8
       dbg "mystery code" unknown
