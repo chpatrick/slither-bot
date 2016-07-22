@@ -22,7 +22,6 @@ import           ClassyPrelude
 import           Data.Serialize.Get
 import           Data.Word (Word16)
 import qualified Data.ByteString.Char8 as BSC8
-import           Control.Monad.Loops (whileM)
 import           Data.Bits (shiftL, (.|.))
 import           Data.Char (chr)
 
@@ -270,10 +269,23 @@ getServerMessage inputLength _ = do
   messageType <- getMessageType inputLength
   return (ServerMessage timeSinceLastMessage messageType (error "nope"))
 
+unexpectedInputSize :: Monad m => Int -> m a
 unexpectedInputSize size = fail ("Unexpected input size " ++ show size)
 
 getSnakeId :: Get SnakeId
 getSnakeId = SnakeId <$> w16
+
+getPosition16 :: Get Position
+getPosition16 = do
+  x <- w16
+  y <- w16
+  return (Position x y)
+
+getPosition8 :: Get Position
+getPosition8 = do
+  x <- w8
+  y <- w8
+  return (Position x y)
 
 getMessageType :: Int -> Get MessageType
 getMessageType inputLength = do
@@ -359,13 +371,23 @@ getMessageType inputLength = do
           unexpectedInputSize size
       return (MTRemoveLastPart removeLastPart)
     'g' -> do
-      return (MTMoveSnake undefined)
+      snakeId <- getSnakeId
+      position <- getPosition16
+      return (MTMoveSnake (MoveSnake snakeId False position))
     'G' -> do
-      return (MTMoveSnake undefined)
+      snakeId <- getSnakeId
+      position <- getPosition8
+      return (MTMoveSnake (MoveSnake snakeId True position))
     'n' -> do
-      return (MTIncreaseSnake undefined)
+      snakeId <- getSnakeId
+      position <- getPosition16
+      newFam <- w24
+      return (MTIncreaseSnake (IncreaseSnake snakeId False position newFam))
     'N' -> do
-      return (MTIncreaseSnake undefined)
+      snakeId <- getSnakeId
+      position <- getPosition8
+      newFam <- w24
+      return (MTIncreaseSnake (IncreaseSnake snakeId True position newFam))
     'v' -> do -- game over
       unknown <- getWord8
       dbg "mystery code" unknown
