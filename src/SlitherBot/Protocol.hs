@@ -91,7 +91,7 @@ data ServerMessage = ServerMessage
 
 data MessageType
   = MTSetup !Setup
-  | MTRemoveLastPart
+  | MTRemoveLastPart !SnakeId
   | MTMoveSnake !MoveSnake
   | MTIncreaseSnake !IncreaseSnake
   deriving (Eq, Show)
