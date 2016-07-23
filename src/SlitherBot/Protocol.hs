@@ -79,16 +79,16 @@ type Direction = Double
 
 data FirstClientMessage
   = SetUsernameAndSkin
-    { suasProtocolVersion :: Word8
-    , suasSkinId :: Word8
-    , suasName :: ByteString
+    { suasProtocolVersion :: !Word8
+    , suasSkinId :: !Word8
+    , suasName :: !ByteString
     }
   deriving (Eq, Show)
 
 data ClientMessage
   = Ping
-  | SetAngle Double
-  | Turn Double
+  | SetAngle !Double
+  | Turn !Double
   | EnterSpeed
   | LeaveSpeed
   deriving (Eq, Show)
