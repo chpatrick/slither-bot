@@ -1,24 +1,34 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module SlitherBot.Proxy (proxy) where
 
 import           ClassyPrelude
 import qualified Network.WebSockets  as WS
 import           Network.URI (parseURI, URI(..), URIAuth(..))
 import qualified Data.ByteString.Char8 as BSC8
+import qualified Network.Wai.Handler.WebSockets as WS
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai as Wai
+import qualified Network.HTTP.Types as Http
 
 import           SlitherBot.Ai
+import           SlitherBot.Ai.Circle
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
 
+-- Path: 
 proxy :: Int -> IO ()
-proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
-  let reqHead = WS.pendingRequest pendingConn
-  case parseURI (BSC8.unpack (WS.requestPath reqHead)) of
-    Just URI { uriPath = path, uriAuthority = Just URIAuth { uriRegName = host, uriPort = ':' : portString } } -> do
-      putStrLn "Accepting request"
-      print reqHead
-
+proxy serverPort =
+  Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions wsApp backupApp)
+  where
+    wsApp pendingConn = do
+      let reqHead = WS.pendingRequest pendingConn
+      let couldNotParseURI = do
+            WS.rejectRequest pendingConn "Could not parse URI"
+      Just host0 <- return (BSC8.unpack <$> lookup "Host" (WS.requestHeaders reqHead))
+      let (host, ':' : portString) = break (== ':') host0
+      let path = BSC8.unpack (WS.requestPath reqHead)
       clientConn <- WS.acceptRequest pendingConn
       port <- case readMay portString of
         Nothing -> fail ("Could not read port from " ++ show portString)
@@ -31,8 +41,6 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
 
       -- make the equivalent connection to the server
       WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
-
-
         let
           clientToServer = do
             -- forward first message
@@ -42,33 +50,26 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
             let
               clientServerLoop = forever $ do
                 -- putStrLn "Sending data..."
-                messageBs <- WS.receiveData clientConn
-                maybeChangedMessage <- case parseClientMessage messageBs of
-                  Left err -> do
-                    fail ("CANNOT PARSE CLIENTMESSAGE " ++ err)
-                    -- return (Just messageBs)
-                  Right message -> do
-                    case message of
-                      asd -> return (Just (serializeClientMessage asd))
-                      -- _ -> return Nothing
-                      -- SetAngle _ -> return (serializeClientMessage (SetAngle 0))
-                      -- _ -> return (serializeClientMessage message)
-                case maybeChangedMessage of
-                  Nothing -> return ()
-                  Just changedMessage -> do
-                    WS.sendBinaryData serverConn changedMessage
+                messageBs :: ByteString <- WS.receiveData clientConn
+                WS.sendBinaryData serverConn messageBs
+            fmap (either id id) (race (aiLoop (aiInitialState ai) Nothing) clientServerLoop)
 
-            fmap (either id id) (race (ai aiInitialState) clientServerLoop)
+          ai = circleAi
 
-
-          aiInitialState = AiState { aiStateAngle = 0 }
-          ai aiState = do
+          aiLoop state mbPrevOutput = do
             gameState <- readMVar gameStateVar
-            let (angle, nextState) = calculateNextMove gameState aiState
-            WS.sendBinaryData serverConn (serializeClientMessage (SetAngle angle))
-            print angle
+            let (output, nextState) = aiUpdate ai gameState state
+            when ((aoAngle <$> mbPrevOutput) /= Just (aoAngle output)) $
+              WS.sendBinaryData serverConn (serializeClientMessage (SetAngle (aoAngle output)))
+            case (aoSpeedup <$> mbPrevOutput, aoSpeedup output) of
+              (Nothing, False) -> return ()
+              (Just x, y) -> when (x /= y) $ do
+                let msg = if aoSpeedup output then EnterSpeed else LeaveSpeed
+                WS.sendBinaryData serverConn (serializeClientMessage msg)
+              (Nothing, True) -> do
+                WS.sendBinaryData serverConn (serializeClientMessage EnterSpeed)
             threadDelay (250 * 1000)
-            ai nextState
+            aiLoop nextState (Just output)
 
           serverToClient = forever $ do
             msg <- WS.receiveData serverConn
@@ -85,5 +86,8 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
                     Right Nothing -> return gameState
                     Right (Just gameState') -> return gameState'
         fmap (either id id) (race clientToServer serverToClient)
-    Just _ -> WS.rejectRequest pendingConn "Could not parse URI"
-    Nothing -> WS.rejectRequest pendingConn "Could not parse URI"
+
+    backupApp :: Wai.Application
+    backupApp _req cont = do
+      putStrLn "Bad request!"
+      cont (Wai.responseLBS Http.status400 [] "Not a WebSocket request")
