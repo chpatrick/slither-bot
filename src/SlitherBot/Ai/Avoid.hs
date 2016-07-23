@@ -33,7 +33,7 @@ data AvoidAiState = AvoidAiState
 
 type UgiRes = 256
 
-ugiRes :: Int
+ugiRes :: Int32
 ugiRes = fromIntegral (natVal (Proxy :: Proxy UgiRes))
 
 data UtilityGridInfo = UtilityGridInfo
@@ -41,7 +41,7 @@ data UtilityGridInfo = UtilityGridInfo
   } deriving (Eq, Show)
 
 utilityGridInfo :: UtilityGridInfo
-utilityGridInfo = UtilityGridInfo{ugiSize = 500}
+utilityGridInfo = UtilityGridInfo{ugiSize = 5000}
 
 type Utility = Double
 
@@ -57,19 +57,38 @@ emptyUtilityGrid = do
     (Proxy :: Proxy Double)
     (pure 128 :: V4 Double)
 
+snakeBodyPartRadius :: Double
+snakeBodyPartRadius = 100
+
 utilityGrid :: UtilityGridInfo -> SnakeId -> Snake -> GameState -> UtilityGrid
-utilityGrid UtilityGridInfo{..} ourSnakeId Snake{..} GameState{..} =
-  CV.exceptError (CV.createMat emptyUtilityGrid)
+utilityGrid UtilityGridInfo{..} ourSnakeId ourSnake GameState{..} =
+  CV.exceptError $ CV.createMat $ do
+    mutMat <- emptyUtilityGrid
+    forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
+      -- when (snakeId /= ourSnakeId) $
+        forM_ (snakePosition : toList snakeBody) $ \pos ->
+          forM_ (gridIndex pos) $ \ix ->
+            CV.circle mutMat
+              ix
+              (sizeToPixels snakeBodyPartRadius)
+              (pure 255 :: V4 Double)
+              (-1)
+              CV.LineType_8
+              0
+    return mutMat
   where
     -- From Position to an index in the UtilityGrid
-    gridIndex :: Position -> Maybe Int 
+    gridIndex :: Position -> Maybe (V2 Int32)
     gridIndex pos = do
-      let o = snakePosition ^-^ pure (ugiSize / 2)
+      let o = snakePosition ourSnake ^-^ pure (ugiSize / 2)
       let gridPos = (pos ^-^ o) ^* (fromIntegral ugiRes / ugiSize)
       let gridPosIntegral = floor <$> gridPos
       guard (gridPosIntegral ^. _x < ugiRes && gridPosIntegral ^. _y < ugiRes)
       guard (gridPosIntegral ^. _x >= 0 && gridPosIntegral ^. _y >= 0)
-      return (gridPosIntegral ^. _y * ugiRes + gridPosIntegral ^. _x)
+      return gridPosIntegral
+
+    sizeToPixels :: (Integral a) => Double -> a
+    sizeToPixels size = round (size * fromIntegral ugiRes / ugiSize)
 
 avoidAi :: Ai AvoidAiState
 avoidAi = Ai
