@@ -12,6 +12,8 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai as Wai
 import qualified Network.HTTP.Types as Http
 import qualified Lucid
+import           Control.Exception.Safe (tryAny)
+import           Data.Void (absurd)
 
 import           SlitherBot.Ai
 import           SlitherBot.Ai.Avoid
@@ -44,7 +46,7 @@ proxy serverPort = do
       gameStateVar <- newMVar defaultGameState
 
       -- make the equivalent connection to the server
-      WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
+      exc <- tryAny $ WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
         let
           clientToServer = do
             -- forward first message
@@ -92,6 +94,10 @@ proxy serverPort = do
                     Right Nothing -> return gameState
                     Right (Just gameState') -> return gameState'
         fmap (either id id) (race clientToServer serverToClient)
+      case exc of
+        Left exc' -> do
+          putStrLn ("EXCEPTION quitting " ++ tshow exc')
+        Right x -> absurd x
 
     backupApp aiStateVar _req cont = do
       aiState <- atomically (readTVar aiStateVar)
@@ -99,5 +105,5 @@ proxy serverPort = do
             Lucid.html_ $ do
               Lucid.body_ $ do
                 aiHtmlStatus ai aiState
-                Lucid.script_ "setTimeout(function() { location.reload(); }, 1000)"
+                Lucid.script_ "setTimeout(function() { location.reload(); }, 250)"
       cont (Wai.responseLBS Http.status200 [] (Lucid.renderBS statusHtml))

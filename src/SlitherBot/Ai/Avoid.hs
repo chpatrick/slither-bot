@@ -41,7 +41,7 @@ data UtilityGridInfo = UtilityGridInfo
   } deriving (Eq, Show)
 
 utilityGridInfo :: UtilityGridInfo
-utilityGridInfo = UtilityGridInfo{ugiSize = 5000}
+utilityGridInfo = UtilityGridInfo{ugiSize = 1000}
 
 type Utility = Double
 
