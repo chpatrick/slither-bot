@@ -30,24 +30,26 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
 
       -- make the equivalent connection to the server
       WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
-        let clientToServer = forever $ do
-              -- putStrLn "Sending data..."
-              msg <- WS.receiveData clientConn
-              WS.sendBinaryData serverConn (msg :: BSC8.ByteString)
-        let serverToClient = forever $ do
-              msg <- WS.receiveData serverConn
-              WS.sendBinaryData clientConn msg
-              modifyMVar_ gameStateVar $ \gameState -> do
-                case parseServerMessage (gsSetup gameState) msg of
-                  Left err -> do
-                    putStrLn $ "Couldn't parse " ++ tshow msg ++ ": " ++ pack err
-                    return gameState
-                  Right serverMsg -> do
-                    putStrLn ("SERVER " ++ tshow serverMsg)
-                    case updateGameState gameState serverMsg of
-                      Left err -> fail ("Couldn't update game state: " ++ err)
-                      Right Nothing -> return gameState
-                      Right (Just gameState') -> return gameState'
+        let
+          clientToServer = forever $ do
+            -- putStrLn "Sending data..."
+            msg <- WS.receiveData clientConn
+            putStrLn ("CLIENT " ++ tshow (parseClientMessage msg))
+            WS.sendBinaryData serverConn (msg :: BSC8.ByteString)
+          serverToClient = forever $ do
+            msg <- WS.receiveData serverConn
+            WS.sendBinaryData clientConn msg
+            modifyMVar_ gameStateVar $ \gameState -> do
+              case parseServerMessage msg of
+                Left err -> do
+                  putStrLn $ "Couldn't parse " ++ tshow msg ++ ": " ++ pack err
+                  return gameState
+                Right serverMsg -> do
+                  putStrLn ("SERVER " ++ tshow serverMsg)
+                  case updateGameState gameState serverMsg of
+                    Left err -> fail ("Couldn't update game state: " ++ err)
+                    Right Nothing -> return gameState
+                    Right (Just gameState') -> return gameState'
         fmap (either id id) (race clientToServer serverToClient)
     Just _ -> WS.rejectRequest pendingConn "Could not parse URI"
     Nothing -> WS.rejectRequest pendingConn "Could not parse URI"

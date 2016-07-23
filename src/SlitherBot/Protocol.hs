@@ -7,6 +7,9 @@ module SlitherBot.Protocol
   ( Setup(..)
   , SnakeId(..)
   , defaultSetup
+  , FirstClientMessage(..)
+  , ClientMessage(..)
+  , parseClientMessage
   , ServerMessage(..)
   , parseServerMessage
   , Fam
@@ -16,11 +19,13 @@ module SlitherBot.Protocol
   , Direction
   , MoveSnake(..)
   , IncreaseSnake(..)
+  , AddSnake(..)
   , RemoveSnake(..)
   ) where
 
 import           ClassyPrelude
 import           Data.Serialize.Get
+import           Data.Serialize.Put
 import           Data.Word (Word16)
 import qualified Data.ByteString.Char8 as BSC8
 import           Data.Bits (shiftL, (.|.))
@@ -34,22 +39,6 @@ data Position = Position
   , posY :: !Double
   } deriving (Eq, Show, Generic)
 instance Hashable Position
-
-{-
-data NewFood = NewFood
-    { newFoodID :: !Double -- ID?
-    , newFoodX :: !Double -- X coordinate
-    , newFoodY :: !Double -- Y coordinate
-    , newFoodQ :: !Double -- radius?
-    , newFoodColor :: !Word8 -- color?
-    , newFoodSX :: !Word16 -- sector X
-    , newFoodSY :: !Word16 -- sector Y
-    } deriving (Eq, Show)
-
-data LeaderSnake = LeaderSnake
-  { leaderName :: !BSC8.ByteString
-  } deriving (Eq, Show)
--}
 
 data Setup = Setup
   { setupGrid :: !Int64
@@ -86,6 +75,22 @@ type Fam = Double
 
 -- Clockwise radians from looking north
 type Direction = Double
+
+data FirstClientMessage
+  = SetUsernameAndSkin
+    { suasProtocolVersion :: Word8
+    , suasSkinId :: Word8
+    , suasName :: ByteString
+    }
+  deriving (Eq, Show)
+
+data ClientMessage
+  = Ping
+  | SetAngle Double
+  | Turn Double
+  | EnterSpeed
+  | LeaveSpeed
+  deriving (Eq, Show)
 
 data ServerMessage = ServerMessage
   { smTimeSinceLastMessage :: !Word16
@@ -268,26 +273,29 @@ parseServerMessage :: Config -> ByteString -> Either String ServerMessage
 parseServerMessage cfg = runGet (getServerMessage cfg)
 -}
 
-w8 :: Num a => Get a
-w8 = fromIntegral <$> getInt8
+i8 :: Num a => Get a
+i8 = fromIntegral <$> getInt8
 
-w16 :: Num a => Get a
-w16 = fromIntegral <$> getInt16be
+i16 :: Num a => Get a
+i16 = fromIntegral <$> getInt16be
 
-w24 :: Num a => Get a
-w24 = do
-  msb <- w8
-  lsbs <- w16
+i24 :: Num a => Get a
+i24 = do
+  msb <- i8
+  lsbs <- i16
   return $ fromIntegral (((msb `shiftL` 16) .|. lsbs) :: Word)
 
 dbg :: (Monad m, Show a) => String -> a -> m ()
 dbg name val = traceM (name ++ ": " ++ show val)
 
-parseServerMessage :: Setup -> ByteString -> Either String ServerMessage
-parseServerMessage setup input = runGet (getServerMessage (BSC8.length input) setup) input
+parseServerMessage :: ByteString -> Either String ServerMessage
+parseServerMessage input = runGet (getServerMessage (BSC8.length input)) input
 
-getServerMessage :: Int -> Setup -> Get ServerMessage
-getServerMessage inputLength _ = do
+parseClientMessage :: ByteString -> Either String ClientMessage
+parseClientMessage input = runGet getClientMessage input
+
+getServerMessage :: Int -> Get ServerMessage
+getServerMessage inputLength = do
   timeSinceLastMessage <- getWord16be
   messageType <- getMessageType inputLength
   return (ServerMessage timeSinceLastMessage messageType)
@@ -296,24 +304,24 @@ unexpectedInputSize :: Monad m => Int -> m a
 unexpectedInputSize size = fail ("Unexpected input size " ++ show size)
 
 getSnakeId :: Get SnakeId
-getSnakeId = SnakeId <$> w16
+getSnakeId = SnakeId <$> i16
 
 getPosition16 :: Get Position
 getPosition16 = do
-  x <- w16
-  y <- w16
+  x <- i16
+  y <- i16
   return (Position x y)
 
 getPosition8 :: Get Position
 getPosition8 = do
-  x <- w8
-  y <- w8
+  x <- i8
+  y <- i8
   return (Position x y)
 
 getPosition5 :: Get Position
 getPosition5 = do
-  x <- w24
-  y <- w24
+  x <- i24
+  y <- i24
   return (Position (x / 5) (y / 5))
 
 _MAGIC_NUMBER :: Double
@@ -321,35 +329,35 @@ _MAGIC_NUMBER = 16777215
 
 getFam :: Get Fam
 getFam = do
-  fam24 <- w24
+  fam24 <- i24
   return (fam24 / _MAGIC_NUMBER)
 
 getAngle :: Get Double
 getAngle = do
-  angle24 <- w24
+  angle24 <- i24
   return (angle24 * 2 * pi / _MAGIC_NUMBER)
 
 getMessageType :: Int -> Get MessageType
 getMessageType inputLength = do
-  msgHeader <- chr <$> w8
+  msgHeader <- chr <$> i8
   case msgHeader of
     'a' -> do
-      grd <- w24
-      e <- w16
+      grd <- i24
+      e <- i16
       dbg "e" e
-      sector_size <- w16
-      sector_count_along_edge <- w16
-      spangdv <- (/10) <$> w8
-      nsp1 <- (/100) <$> w16
-      nsp2 <- (/100) <$> w16
-      nsp3 <- (/100) <$> w16
-      mamu <- (/1E3) <$> w16
-      mamu2 <- (/1E3) <$> w16
-      cst <- (/1E3) <$> w16
+      sector_size <- i16
+      sector_count_along_edge <- i16
+      spangdv <- (/10) <$> i8
+      nsp1 <- (/100) <$> i16
+      nsp2 <- (/100) <$> i16
+      nsp3 <- (/100) <$> i16
+      mamu <- (/1E3) <$> i16
+      mamu2 <- (/1E3) <$> i16
+      cst <- (/1E3) <$> i16
       left <- remaining
       protocol_version <-
         if left > 0
-          then w8
+          then i8
           else return $ case defaultSetup of
             Setup { setupProtocol = defaultVersion } -> defaultVersion
       let
@@ -374,9 +382,9 @@ getMessageType inputLength = do
     --     then
     --       fmap NewFoods $ whileRemaining $ do
     --         newFoodColor <- getWord8
-    --         newFoodX <- w16
-    --         newFoodY <- w16
-    --         newFoodQ <- (/5) <$> w8
+    --         newFoodX <- i16
+    --         newFoodY <- i16
+    --         newFoodQ <- (/5) <$> i8
     --         let newFoodID = newFoodY * fromIntegral grd * 3 + newFoodX
     --         let newFoodSX = floor (newFoodX / sector_size)
     --         let newFoodSY = floor (newFoodY / sector_size)
@@ -385,12 +393,12 @@ getMessageType inputLength = do
     -- 'l' -> do -- leaderboard
     --   h <- getWord8
     --   dbg "h" h
-    --   statsRank <- w16
-    --   statsSnakeCount <- w16
+    --   statsRank <- i16
+    --   statsSnakeCount <- i16
     --   statsLeaderboard <- whileRemaining $ do
-    --     k <- w16
+    --     k <- i16
     --     dbg "k" k
-    --     u <- (\w -> scaleFloat (-24) (fromIntegral w)) <$> w24
+    --     u <- (\w -> scaleFloat (-24) (fromIntegral w)) <$> i24
     --     dbg "u" (u :: Double)
     --     y <- (`mod`9) <$> getWord8
     --     dbg "y" y
@@ -434,7 +442,7 @@ getMessageType inputLength = do
       snakeId <- getSnakeId
       case inputLength of
         6 -> do
-          diedByte <- w8
+          diedByte <- i8
           return (MTRemoveSnake (RemoveSnake snakeId (diedByte == (1 :: Word8))))
         other
           | other >= 31 -> do
@@ -442,11 +450,11 @@ getMessageType inputLength = do
               ehangWehang <- getAngle
               _unused <- getWord8
               angle <- getAngle
-              speed <- (/ 1e3) <$> w16
+              speed <- (/ 1e3) <$> i16
               fam <- getFam
-              skin <- w8
+              skin <- i8
               position <- getPosition5
-              nameLength <- w8
+              nameLength <- i8
               name <- getBytes nameLength
               tailPart <- getPosition5
               let
@@ -487,10 +495,27 @@ getMessageType inputLength = do
     other -> return (MTUnhandled other)
 
     -- h | h `elem` ("eE345" :: String) -> do
-    --   t <- w16
+    --   t <- i16
     --   e <- remaining
     --   dbg "h" h
     --   dbg "e" e
     --   bytesLeft <- remaining
     --   msgBody <- getBytes bytesLeft
     --   return OtherMessage {..}
+
+getClientMessage :: Get ClientMessage
+getClientMessage = do
+  firstByte <- getWord8
+  case firstByte of
+    angle | angle <= 250 -> return (SetAngle ((fromIntegral angle / 251) * 2 * pi))
+    251 -> return Ping
+    252 -> do
+      angleByte <- getWord8
+      return (Turn ((fromIntegral angleByte / 256) * 2 * pi))
+    253 -> return EnterSpeed
+    254 -> return LeaveSpeed
+    other -> fail ("Unexpected client byte " ++ show other)
+
+putClientMessage :: ClientMessage -> Put
+putClientMessage message = case message of
+  _ -> undefined

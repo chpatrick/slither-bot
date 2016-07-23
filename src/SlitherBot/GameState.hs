@@ -48,8 +48,8 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     let snakeBody2 = snakePosition Seq.<| snakeBody1
     let absPosition = if msRelative
           then Position
-            { posX = posX msPosition - 128 + posX snakePosition
-            , posY = posY msPosition - 128 + posY snakePosition
+            { posX = posX msPosition + posX snakePosition
+            , posY = posY msPosition + posY snakePosition
             }
           else msPosition
     let snake' = snake
@@ -62,8 +62,8 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     let snakeBody' = snakePosition Seq.<| snakeBody
     let absPosition = if isRelative
           then Position
-            { posX = posX isPosition - 128 + posX snakePosition
-            , posY = posY isPosition - 128 + posY snakePosition
+            { posX = posX isPosition + posX snakePosition
+            , posY = posY isPosition + posY snakePosition
             }
           else isPosition
     let snake' = snake
@@ -73,7 +73,16 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     return (Just gs{gsSnakes = HMS.insert isSnakeId snake' gsSnakes})
   MTGameOver -> return Nothing
   MTUnhandled _ -> return (Just gs)
-  MTAddSnake as -> traceShow as (return (Just gs))
+  MTAddSnake AddSnake{..} ->
+    let
+      snake =
+        Snake
+        { snakePosition = asPosition
+        , snakeDirection = asAngle
+        , snakeFam = asFam
+        , snakeBody = Seq.fromList asBody
+        }
+    in return (Just gs{gsSnakes = HMS.insert asSnakeId snake gsSnakes})
   MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of
