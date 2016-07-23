@@ -6,6 +6,7 @@ module SlitherBot.Ai
 
 import           SlitherBot.GameState
 import           SlitherBot.Protocol
+import qualified Lucid
 
 import qualified Data.HashMap.Strict as HMS
 import qualified Data.Sequence as Seq
@@ -19,4 +20,5 @@ data AiOutput = AiOutput
 data Ai s = Ai
   { aiUpdate :: !(GameState -> s -> (AiOutput, s))
   , aiInitialState :: !s
+  , aiHtmlStatus :: !(s -> Lucid.Html ())
   }

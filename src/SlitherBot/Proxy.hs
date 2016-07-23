@@ -11,6 +11,7 @@ import qualified Network.Wai.Handler.WebSockets as WS
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai as Wai
 import qualified Network.HTTP.Types as Http
+import qualified Lucid
 
 import           SlitherBot.Ai
 import           SlitherBot.Ai.Avoid
@@ -19,10 +20,13 @@ import           SlitherBot.GameState
 
 -- Path: 
 proxy :: Int -> IO ()
-proxy serverPort =
-  Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions wsApp backupApp)
+proxy serverPort = do
+  aiStateVar <- newTVarIO (aiInitialState ai)
+  Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions (wsApp aiStateVar) (backupApp aiStateVar))
   where
-    wsApp pendingConn = do
+    ai = avoidAi
+
+    wsApp aiStateVar pendingConn = do
       let reqHead = WS.pendingRequest pendingConn
       let couldNotParseURI = do
             WS.rejectRequest pendingConn "Could not parse URI"
@@ -52,13 +56,15 @@ proxy serverPort =
                 -- putStrLn "Sending data..."
                 messageBs :: ByteString <- WS.receiveData clientConn
                 WS.sendBinaryData serverConn messageBs
-            fmap (either id id) (race (aiLoop (aiInitialState ai) Nothing) clientServerLoop)
+            fmap (either id id) (race (aiLoop Nothing) clientServerLoop)
 
-          ai = avoidAi
-
-          aiLoop state mbPrevOutput = do
+          aiLoop mbPrevOutput = do
             gameState <- readMVar gameStateVar
-            let (output, nextState) = aiUpdate ai gameState state
+            output <- atomically $ do
+              state <- readTVar aiStateVar
+              let (output, nextState) = aiUpdate ai gameState state
+              writeTVar aiStateVar nextState
+              return output
             when ((aoAngle <$> mbPrevOutput) /= Just (aoAngle output)) $
               WS.sendBinaryData serverConn (serializeClientMessage (SetAngle (aoAngle output)))
             case (aoSpeedup <$> mbPrevOutput, aoSpeedup output) of
@@ -69,7 +75,7 @@ proxy serverPort =
               (Nothing, True) -> do
                 WS.sendBinaryData serverConn (serializeClientMessage EnterSpeed)
             threadDelay (250 * 1000)
-            aiLoop nextState (Just output)
+            aiLoop (Just output)
 
           serverToClient = forever $ do
             msg <- WS.receiveData serverConn
@@ -87,7 +93,11 @@ proxy serverPort =
                     Right (Just gameState') -> return gameState'
         fmap (either id id) (race clientToServer serverToClient)
 
-    backupApp :: Wai.Application
-    backupApp _req cont = do
-      putStrLn "Bad request!"
-      cont (Wai.responseLBS Http.status400 [] "Not a WebSocket request")
+    backupApp aiStateVar _req cont = do
+      aiState <- atomically (readTVar aiStateVar)
+      let statusHtml = do
+            Lucid.html_ $ do
+              Lucid.body_ $ do
+                aiHtmlStatus ai aiState
+                Lucid.script_ "setTimeout(function() { location.reload(); }, 1000)"
+      cont (Wai.responseLBS Http.status200 [] (Lucid.renderBS statusHtml))

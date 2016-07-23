@@ -2,6 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE OverloadedStrings #-}
 module SlitherBot.Ai.Avoid
   ( AvoidAiState
   , avoidAi
@@ -13,10 +14,13 @@ import           Linear
 import qualified OpenCV as CV
 import           Data.Proxy (Proxy(..))
 import           GHC.TypeLits
-import           Control.Monad.ST (runST)
+import           Control.Monad.ST (ST)
 import           Control.Monad.Except (runExcept)
 import           Linear.V4 (V4)
 import qualified Data.HashMap.Strict as HMS
+import qualified Data.ByteString.Base64 as Base64
+import qualified Data.Text.Encoding as T
+import qualified Lucid.Html5 as Lucid
 
 import           SlitherBot.Ai
 import           SlitherBot.Protocol
@@ -24,7 +28,8 @@ import           SlitherBot.GameState
 
 data AvoidAiState = AvoidAiState
   { aasCurrentAngle :: !Double
-  } deriving (Eq, Show)
+  , aasUtilityGrid :: !UtilityGrid
+  }
 
 type UgiRes = 256
 
@@ -41,19 +46,20 @@ utilityGridInfo = UtilityGridInfo{ugiSize = 500}
 type Utility = Double
 
 -- Length: ugiEdge * ugiEdge
-type UtilityGrid = CV.Mat (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Double)
+type UtilityGrid      = CV.Mat    (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Double)
+type MutUtilityGrid s = CV.MutMat (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Double) s
+
+emptyUtilityGrid :: CV.CvExceptT (ST s) (MutUtilityGrid s)
+emptyUtilityGrid = do
+  CV.mkMatM
+    (Proxy :: Proxy '[UgiRes, UgiRes])
+    (Proxy :: Proxy 1)
+    (Proxy :: Proxy Double)
+    (pure 128 :: V4 Double)
 
 utilityGrid :: UtilityGridInfo -> SnakeId -> Snake -> GameState -> UtilityGrid
-utilityGrid UtilityGridInfo{..} ourSnakeId Snake{..} GameState{..} = let
-  mbErr = runExcept $ CV.createMat $ do
-    CV.mkMatM
-      (Proxy :: Proxy '[UgiRes, UgiRes])
-      (Proxy :: Proxy 1)
-      (Proxy :: Proxy Double)
-      (pure 0.5 :: V4 Double)
-  in case mbErr of
-    Left err -> error ("utilityGrid: got OpenCV error: " ++ show err)
-    Right x -> x
+utilityGrid UtilityGridInfo{..} ourSnakeId Snake{..} GameState{..} =
+  CV.exceptError (CV.createMat emptyUtilityGrid)
   where
     -- From Position to an index in the UtilityGrid
     gridIndex :: Position -> Maybe Int 
@@ -67,12 +73,20 @@ utilityGrid UtilityGridInfo{..} ourSnakeId Snake{..} GameState{..} = let
 
 avoidAi :: Ai AvoidAiState
 avoidAi = Ai
-  { aiInitialState = AvoidAiState 0
+  { aiInitialState = AvoidAiState 0 (CV.exceptError (CV.createMat emptyUtilityGrid))
   , aiUpdate = \gs@GameState{..} aas -> case gsOwnSnake of
       Nothing -> (AiOutput 0 False, aas)
       Just ourSnakeId -> case HMS.lookup ourSnakeId gsSnakes of
         Nothing -> error ("Could not find our snake " ++ show ourSnakeId)
         Just snake -> let
           ug = utilityGrid utilityGridInfo ourSnakeId snake gs
-          in (ug `seq` AiOutput 0 False, aas)
+          in (AiOutput 0 False, aas{aasUtilityGrid = ug})
+  , aiHtmlStatus = \AvoidAiState{..} -> do
+      Lucid.p_ (fromString (show aasCurrentAngle))
+      let encodedImg =
+            CV.exceptError (CV.imencode (CV.OutputPng CV.defaultPngParams{CV.pngParamCompression = 0}) aasUtilityGrid)
+      Lucid.img_
+        [ Lucid.alt_ "Utility grid"
+        , Lucid.src_ ("data:image/png;base64," <> T.decodeUtf8 (Base64.encode encodedImg))
+        ]
   }

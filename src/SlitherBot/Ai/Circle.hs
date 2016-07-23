@@ -19,4 +19,5 @@ circleAi = Ai
       let newAngle = (casAngle + pi / 4) `mod'` (2 * pi)
       in (AiOutput{aoAngle = newAngle, aoSpeedup = False}, cas{ casAngle = newAngle })
   , aiInitialState = CircleAiState{casAngle = 0}
+  , aiHtmlStatus = mempty
   }
