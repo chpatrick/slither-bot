@@ -172,10 +172,10 @@ data RemoveSnake
   deriving (Eq, Show)
 
 i8 :: Num a => Get a
-i8 = fromIntegral <$> getInt8
+i8 = fromIntegral <$> getWord8
 
 i16 :: Num a => Get a
-i16 = fromIntegral <$> getInt16be
+i16 = fromIntegral <$> getWord16be
 
 i24 :: Num a => Get a
 i24 = do
@@ -214,7 +214,7 @@ getPosition8 :: Get Position
 getPosition8 = do
   x <- i8
   y <- i8
-  return (V2 x y)
+  return (V2 (x - 128) (y - 128))
 
 getPosition5 :: Get Position
 getPosition5 = do

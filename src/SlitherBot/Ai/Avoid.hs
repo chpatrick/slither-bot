@@ -41,7 +41,7 @@ data UtilityGridInfo = UtilityGridInfo
   } deriving (Eq, Show)
 
 utilityGridInfo :: UtilityGridInfo
-utilityGridInfo = UtilityGridInfo{ugiSize = 1000}
+utilityGridInfo = UtilityGridInfo{ugiSize = 2000}
 
 type Utility = Double
 
@@ -58,7 +58,7 @@ emptyUtilityGrid = do
     (pure 128 :: V4 Double)
 
 snakeBodyPartRadius :: Double
-snakeBodyPartRadius = 100
+snakeBodyPartRadius = 20
 
 utilityGrid :: UtilityGridInfo -> SnakeId -> Snake -> GameState -> UtilityGrid
 utilityGrid UtilityGridInfo{..} ourSnakeId ourSnake GameState{..} =
