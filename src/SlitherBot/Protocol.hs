@@ -411,7 +411,7 @@ getMessageType inputLength = do
 
 getAddFood :: Int -> Get AddFood
 getAddFood inputLength = do
-  let restLength = inputLength - 2
+  let restLength = inputLength - 3
   actuallyRemaining <- remaining
   unless (restLength == actuallyRemaining) (fail ("Actually remaining no. of bytes(" ++ show actuallyRemaining ++ ") != expected no. of bytes(" ++ show restLength ++ ")"))
   unless (restLength `mod` 6 /= 0) (fail ("(restLength(" ++ show restLength ++ ") `mod` 6 /= 0) "))
