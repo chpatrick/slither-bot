@@ -17,10 +17,11 @@ import           SlitherBot.Protocol
 data GameState = GameState
   { gsSnakes :: !(HMS.HashMap SnakeId Snake)
   , gsSetup :: !Setup
+  , gsOwnSnake :: !(Maybe SnakeId)
   } deriving (Eq, Show)
 
 defaultGameState :: GameState
-defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup }
+defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup, gsOwnSnake = Nothing }
 
 data Snake = Snake
   { snakePosition :: !Position
@@ -82,7 +83,10 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
         , snakeFam = asFam
         , snakeBody = Seq.fromList asBody
         }
-    in return (Just gs{gsSnakes = HMS.insert asSnakeId snake gsSnakes})
+      ownSnake = case gsOwnSnake of
+        Nothing -> Just asSnakeId
+        _ -> gsOwnSnake
+    in return (Just gs{gsSnakes = HMS.insert asSnakeId snake gsSnakes, gsOwnSnake = ownSnake})
   MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of

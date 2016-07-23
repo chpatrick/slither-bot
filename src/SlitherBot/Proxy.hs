@@ -7,6 +7,7 @@ import qualified Network.WebSockets  as WS
 import           Network.URI (parseURI, URI(..), URIAuth(..))
 import qualified Data.ByteString.Char8 as BSC8
 
+import           SlitherBot.Ai
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
 
@@ -30,12 +31,45 @@ proxy serverPort = WS.runServer "127.0.0.1" serverPort $ \pendingConn -> do
 
       -- make the equivalent connection to the server
       WS.runClientWith host port path WS.defaultConnectionOptions headers $ \serverConn -> do
+
+
         let
-          clientToServer = forever $ do
-            -- putStrLn "Sending data..."
-            msg <- WS.receiveData clientConn
-            putStrLn ("CLIENT " ++ tshow (parseClientMessage msg))
-            WS.sendBinaryData serverConn (msg :: BSC8.ByteString)
+          clientToServer = do
+            -- forward first message
+            firstMessageBs <- WS.receiveData clientConn
+            WS.sendBinaryData serverConn (firstMessageBs :: ByteString)
+
+            let
+              clientServerLoop = forever $ do
+                -- putStrLn "Sending data..."
+                messageBs <- WS.receiveData clientConn
+                maybeChangedMessage <- case parseClientMessage messageBs of
+                  Left err -> do
+                    fail ("CANNOT PARSE CLIENTMESSAGE " ++ err)
+                    -- return (Just messageBs)
+                  Right message -> do
+                    case message of
+                      asd -> return (Just (serializeClientMessage asd))
+                      -- _ -> return Nothing
+                      -- SetAngle _ -> return (serializeClientMessage (SetAngle 0))
+                      -- _ -> return (serializeClientMessage message)
+                case maybeChangedMessage of
+                  Nothing -> return ()
+                  Just changedMessage -> do
+                    WS.sendBinaryData serverConn changedMessage
+
+            fmap (either id id) (race (ai aiInitialState) clientServerLoop)
+
+
+          aiInitialState = AiState { aiStateAngle = 0 }
+          ai aiState = do
+            gameState <- readMVar gameStateVar
+            let (angle, nextState) = calculateNextMove gameState aiState
+            WS.sendBinaryData serverConn (serializeClientMessage (SetAngle angle))
+            print angle
+            threadDelay (250 * 1000)
+            ai nextState
+
           serverToClient = forever $ do
             msg <- WS.receiveData serverConn
             WS.sendBinaryData clientConn msg

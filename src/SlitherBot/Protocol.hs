@@ -10,6 +10,7 @@ module SlitherBot.Protocol
   , FirstClientMessage(..)
   , ClientMessage(..)
   , parseClientMessage
+  , serializeClientMessage
   , ServerMessage(..)
   , parseServerMessage
   , Fam
@@ -465,8 +466,6 @@ getMessageType inputLength = do
               unless (restLength >= 0) (fail ("Snake body length = " ++ show restLength ++ " < 0"))
               unless (restLength `mod` 2 == 0) (fail ("Snake body length(" ++ show restLength ++ ") `mod` 2 != 0"))
               relativePositions <- replicateM numberOfParts getPosition8
-              dbg "tailPart" tailPart
-              dbg "relativePositions" relativePositions
               let
                 toGlobalPositions _current acc [] = acc
                 toGlobalPositions current acc (relative : rest) =
@@ -518,4 +517,13 @@ getClientMessage = do
 
 putClientMessage :: ClientMessage -> Put
 putClientMessage message = case message of
-  _ -> undefined
+  Ping -> putWord8 251
+  SetAngle angle -> putWord8 (floor (angle / (2 * pi) * 251))
+  Turn angle -> do
+    putWord8 252
+    putWord8 (floor (angle / (2 * pi) * 256))
+  EnterSpeed -> putWord8 253
+  LeaveSpeed -> putWord8 254
+
+serializeClientMessage :: ClientMessage -> ByteString
+serializeClientMessage message = runPut (putClientMessage message)
