@@ -22,6 +22,9 @@ module SlitherBot.Protocol
   , IncreaseSnake(..)
   , AddSnake(..)
   , RemoveSnake(..)
+  , AddFood(..)
+  , RemoveFood(..)
+  , Food(..)
   ) where
 
 import           ClassyPrelude
@@ -38,7 +41,7 @@ newtype SnakeId = SnakeId {unSnakeId :: Word16}
 data Position = Position
   { posX :: !Double
   , posY :: !Double
-  } deriving (Eq, Show, Generic)
+  } deriving (Eq, Ord, Show, Generic)
 instance Hashable Position
 
 data Setup = Setup
@@ -106,6 +109,8 @@ data MessageType
   | MTUnhandled !Char
   | MTAddSnake !AddSnake
   | MTRemoveSnake !RemoveSnake
+  | MTAddFood !AddFood
+  | MTRemoveFood !RemoveFood
   | MTGameOver
   deriving (Eq, Show)
 
@@ -141,138 +146,32 @@ data AddSnake =
   }
   deriving (Eq, Show)
 
+data AddFood =
+  AddFood
+  { afFoods :: ![Food]
+  }
+  deriving (Eq, Show)
+
+data RemoveFood =
+  RemoveFood
+  { rfPosition :: Position
+  }
+  deriving (Eq, Show)
+
+data Food
+  = Food
+    { foodColor :: !Word8
+    , foodPosition :: !Position
+    , foodValue :: !Double
+    }
+  deriving (Eq, Ord, Show)
+
 data RemoveSnake
   = RemoveSnake
     { rsSnakeId :: !SnakeId
     , rsDied :: !Bool
     }
   deriving (Eq, Show)
-
-{-
-data ServerMessage
-  = Setup Config
-  | NewFoods [ NewFood ]
-  | GameOver
-  | Stats
-    { statsRank :: !Word16
-    , statsSnakeCount :: !Word16
-    , statsLeaderboard :: ![ LeaderSnake ]
-    }
-  | OtherMessage
-    { msgC :: !Word16
-    , msgHeader :: !Char
-    , msgBody :: !BSC8.ByteString
-    }
-  deriving (Eq, Show)
-
-whileRemaining :: Get a -> Get [ a ]
-whileRemaining = whileM ((>0) <$> remaining)
-
-oldProtocol :: Get a
-oldProtocol = fail "Unsupported protocol version."
-
-getServerMessage :: Config -> Get ServerMessage
-getServerMessage Config{..} = do
-  msgC <- getWord16be
-  msgHeader <- chr <$> w8
-  case msgHeader of
-    'a' -> do
-      grd <- w24
-      e <- w16
-      dbg "e" e
-      sector_size <- w16
-      sector_count_along_edge <- w16
-      spangdv <- (/10) <$> w8
-      nsp1 <- (/100) <$> w16
-      nsp2 <- (/100) <$> w16
-      nsp3 <- (/100) <$> w16
-      mamu <- (/1E3) <$> w16
-      mamu2 <- (/1E3) <$> w16
-      cst <- (/1E3) <$> w16
-      left <- remaining
-      protocol_version <-
-        if left > 0
-          then w8
-          else return $ case defaultConfig of
-            Config { protocol_version = defaultVersion } -> defaultVersion
-      return $ Setup Config {..}
-    'F' -> do -- new foods
-      if 4 <= protocol_version
-        then
-          fmap NewFoods $ whileRemaining $ do
-            newFoodColor <- getWord8
-            newFoodX <- w16
-            newFoodY <- w16
-            newFoodQ <- (/5) <$> w8
-            let newFoodID = newFoodY * fromIntegral grd * 3 + newFoodX
-            let newFoodSX = floor (newFoodX / sector_size)
-            let newFoodSY = floor (newFoodY / sector_size)
-            return NewFood{..}
-        else oldProtocol
-    'l' -> do -- leaderboard
-      h <- getWord8
-      dbg "h" h
-      statsRank <- w16
-      statsSnakeCount <- w16
-      statsLeaderboard <- whileRemaining $ do
-        k <- w16
-        dbg "k" k
-        u <- (\w -> scaleFloat (-24) (fromIntegral w)) <$> w24
-        dbg "u" (u :: Double)
-        y <- (`mod`9) <$> getWord8
-        dbg "y" y
-        nameLength <- getWord8
-        name <- getByteString (fromIntegral nameLength)
-        return (LeaderSnake name)
-      bytesLeft <- remaining
-      msgBody <- getBytes bytesLeft
-      return Stats { .. }
-    'v' -> do -- game over
-      unknown <- getWord8
-      dbg "mystery code" unknown
-      return GameOver
-    h | h `elem` ("eE345" :: String) -> do
-      t <- w16
-      e <- remaining
-      dbg "h" h
-      dbg "e" e
-      bytesLeft <- remaining
-      msgBody <- getBytes bytesLeft
-      return OtherMessage {..}
-
-{-
-6 <= protocol_version)
-                            6 == e ? (u = "e" == h ? 1 : 2,
-                            z = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            I = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            M = b[c] / 18) : 5 == e ? "e" == h ? (z = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            M = b[c] / 18) : "E" == h ? (u = 1,
-                            I = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            M = b[c] / 18) : "4" == h ? (u = 2,
-                            I = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            M = b[c] / 18) : "3" == h ? (u = 1,
-                            z = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            I = 2 * b[c] * Math.PI / 256) : "5" == h && (u = 2,
-                            z = 2 * b[c] * Math.PI / 256,
-                            c++,
-                            I = 2 * b[c] * Math.PI / 256) : 4 == e && ("e" == h ? z = 2 * b[c] * Math.PI / 256 : "E" == h ? (u = 1,
-                            I = 2 * b[c] * Math.PI / 256) : "4" == h ? (u = 2,
-                            I = 2 * b[c] * Math.PI / 256) : "3" == h && (M = b[c] / 18));
--}
-    _ -> do
-      bytesLeft <- remaining
-      msgBody <- getBytes bytesLeft
-      return OtherMessage {..}
-
-parseServerMessage :: Config -> ByteString -> Either String ServerMessage
-parseServerMessage cfg = runGet (getServerMessage cfg)
--}
 
 i8 :: Num a => Get a
 i8 = fromIntegral <$> getInt8
@@ -487,6 +386,16 @@ getMessageType inputLength = do
               return (MTAddSnake addSnake)
           | otherwise -> do
               unexpectedInputSize other
+
+    'F' -> do
+      MTAddFood <$> getAddFood inputLength
+
+    'f' -> do
+      MTAddFood <$> getAddFood inputLength
+
+    'b' -> do
+      MTAddFood <$> getAddFood inputLength
+
     'v' -> do -- game over
       unknown <- getWord8
       dbg "mystery code" unknown
@@ -501,6 +410,22 @@ getMessageType inputLength = do
     --   bytesLeft <- remaining
     --   msgBody <- getBytes bytesLeft
     --   return OtherMessage {..}
+
+getAddFood :: Int -> Get AddFood
+getAddFood inputLength = do
+  let restLength = inputLength - 2
+  actuallyRemaining <- remaining
+  unless (restLength == actuallyRemaining) (fail ("Actually remaining no. of bytes(" ++ show actuallyRemaining ++ ") != expected no. of bytes(" ++ show restLength ++ ")"))
+  unless (restLength `mod` 6 /= 0) (fail ("(restLength(" ++ show restLength ++ ") `mod` 6 /= 0) "))
+  foods <- replicateM (restLength `div` 6) getFood
+  return (AddFood foods)
+
+getFood :: Get Food
+getFood = do
+  color <- i8
+  position <- getPosition16
+  valueByte <- i8
+  return (Food color position (valueByte / 5))
 
 getClientMessage :: Get ClientMessage
 getClientMessage = do

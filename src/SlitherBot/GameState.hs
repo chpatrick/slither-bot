@@ -18,10 +18,11 @@ data GameState = GameState
   { gsSnakes :: !(HMS.HashMap SnakeId Snake)
   , gsSetup :: !Setup
   , gsOwnSnake :: !(Maybe SnakeId)
+  , gsFoods :: !(HMS.HashMap Position Food)
   } deriving (Eq, Show)
 
 defaultGameState :: GameState
-defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup, gsOwnSnake = Nothing }
+defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup, gsOwnSnake = Nothing, gsFoods = mempty }
 
 data Snake = Snake
   { snakePosition :: !Position
@@ -88,6 +89,8 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
         _ -> gsOwnSnake
     in return (Just gs{gsSnakes = HMS.insert asSnakeId snake gsSnakes, gsOwnSnake = ownSnake})
   MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
+  MTAddFood AddFood{..} -> return (Just gs{gsFoods = foldr (\food -> HMS.insert (foodPosition food) food) gsFoods afFoods})
+  MTRemoveFood RemoveFood{..} -> return (Just gs{gsFoods = HMS.delete rfPosition gsFoods})
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of
       Nothing -> Left ("Could not find snake " ++ show snakeId)
