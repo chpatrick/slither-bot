@@ -13,7 +13,7 @@ import qualified Network.Wai as Wai
 import qualified Network.HTTP.Types as Http
 
 import           SlitherBot.Ai
-import           SlitherBot.Ai.Circle
+import           SlitherBot.Ai.Avoid
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
 
@@ -54,7 +54,7 @@ proxy serverPort =
                 WS.sendBinaryData serverConn messageBs
             fmap (either id id) (race (aiLoop (aiInitialState ai) Nothing) clientServerLoop)
 
-          ai = circleAi
+          ai = avoidAi
 
           aiLoop state mbPrevOutput = do
             gameState <- readMVar gameStateVar

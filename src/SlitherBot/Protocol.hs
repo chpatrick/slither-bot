@@ -14,7 +14,7 @@ module SlitherBot.Protocol
   , ServerMessage(..)
   , parseServerMessage
   , Fam
-  , Position(..)
+  , Position
   , MessageType(..)
   , RemoveLastPart(..)
   , Direction
@@ -34,15 +34,13 @@ import           Data.Word (Word16)
 import qualified Data.ByteString.Char8 as BSC8
 import           Data.Bits (shiftL, (.|.))
 import           Data.Char (chr)
+import           Linear.V2 hiding (angle)
+import           Control.Lens ((^.))
 
 newtype SnakeId = SnakeId {unSnakeId :: Word16}
   deriving (Eq, Show, Hashable)
 
-data Position = Position
-  { posX :: !Double
-  , posY :: !Double
-  } deriving (Eq, Ord, Show, Generic)
-instance Hashable Position
+type Position = V2 Double
 
 data Setup = Setup
   { setupGrid :: !Int64
@@ -154,7 +152,7 @@ data AddFood =
 
 data RemoveFood =
   RemoveFood
-  { rfPosition :: Position
+  { rfPosition :: !Position
   }
   deriving (Eq, Show)
 
@@ -210,19 +208,19 @@ getPosition16 :: Get Position
 getPosition16 = do
   x <- i16
   y <- i16
-  return (Position x y)
+  return (V2 x y)
 
 getPosition8 :: Get Position
 getPosition8 = do
   x <- i8
   y <- i8
-  return (Position x y)
+  return (V2 x y)
 
 getPosition5 :: Get Position
 getPosition5 = do
   x <- i24
   y <- i24
-  return (Position (x / 5) (y / 5))
+  return (V2 (x / 5) (y / 5))
 
 _MAGIC_NUMBER :: Double
 _MAGIC_NUMBER = 16777215
@@ -368,7 +366,7 @@ getMessageType inputLength = do
               let
                 toGlobalPositions _current acc [] = acc
                 toGlobalPositions current acc (relative : rest) =
-                  let nextPosition = Position (posX current + ((posX relative) / 2)) (posY current + ((posY relative) / 2))
+                  let nextPosition = V2 (current ^. _x + ((relative ^. _x) / 2)) (current ^. _y + ((relative ^. _y) / 2))
                   in toGlobalPositions nextPosition (nextPosition : acc) rest
 
                 addSnake =

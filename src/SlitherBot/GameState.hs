@@ -11,6 +11,8 @@ module SlitherBot.GameState
 import           ClassyPrelude
 import qualified Data.HashMap.Strict as HMS
 import qualified Data.Sequence as Seq
+import           Control.Lens ((^.))
+import           Linear.V2 (_x, _y, V2(..))
 
 import           SlitherBot.Protocol
 
@@ -49,10 +51,9 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
           snakeBody' Seq.:> _ -> snakeBody'
     let snakeBody2 = snakePosition Seq.<| snakeBody1
     let absPosition = if msRelative
-          then Position
-            { posX = posX msPosition + posX snakePosition
-            , posY = posY msPosition + posY snakePosition
-            }
+          then V2
+            (msPosition ^. _x + snakePosition ^. _x)
+            (msPosition ^. _y + snakePosition ^. _y)
           else msPosition
     let snake' = snake
           { snakePosition = absPosition
@@ -63,10 +64,9 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     snake@Snake{..} <- getSnake isSnakeId
     let snakeBody' = snakePosition Seq.<| snakeBody
     let absPosition = if isRelative
-          then Position
-            { posX = posX isPosition + posX snakePosition
-            , posY = posY isPosition + posY snakePosition
-            }
+          then V2
+            (isPosition ^. _x + snakePosition ^. _x)
+            (isPosition ^. _y + snakePosition ^. _y)
           else isPosition
     let snake' = snake
           { snakePosition = absPosition
