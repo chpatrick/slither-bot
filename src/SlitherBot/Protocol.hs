@@ -6,6 +6,7 @@
 module SlitherBot.Protocol
   ( Setup(..)
   , SnakeId(..)
+  , PreyId(..)
   , defaultSetup
   , FirstClientMessage(..)
   , ClientMessage(..)
@@ -25,6 +26,9 @@ module SlitherBot.Protocol
   , AddFood(..)
   , RemoveFood(..)
   , Food(..)
+  , AddPrey(..)
+  , RemovePrey(..)
+  , UpdatePrey(..)
   ) where
 
 import           ClassyPrelude
@@ -144,7 +148,7 @@ data UpdatePrey =
   , upDirection :: Maybe PreyDirection
   , upCurrentAngle :: Maybe Double
   , upWantedAngle :: Maybe Double
-  , upSpeed :: Maybe Word8
+  , upSpeed :: Maybe Double
   }
   deriving (Eq, Show)
 
@@ -322,19 +326,6 @@ getMessageType inputLength = do
           , setupProtocol = protocol_version
           }
       return (MTSetup setup)
-    -- 'F' -> do -- new foods
-    --   if 4 <= protocol_version
-    --     then
-    --       fmap NewFoods $ whileRemaining $ do
-    --         newFoodColor <- getWord8
-    --         newFoodX <- i16
-    --         newFoodY <- i16
-    --         newFoodQ <- (/5) <$> i8
-    --         let newFoodID = newFoodY * fromIntegral grd * 3 + newFoodX
-    --         let newFoodSX = floor (newFoodX / sector_size)
-    --         let newFoodSY = floor (newFoodY / sector_size)
-    --         return NewFood{..}
-    --     else oldProtocol
     -- 'l' -> do -- leaderboard
     --   h <- getWord8
     --   dbg "h" h
@@ -450,7 +441,53 @@ getMessageType inputLength = do
       unknown <- getWord8
       dbg "mystery code" unknown
       return MTGameOver
-    other -> return (MTUnhandled other)
+
+    'j' -> do
+      preyId <- getPreyId
+      xBytes <- i16
+      yBytes <- i16
+      let
+        newPosition = V2 (xBytes * 3 + 1) (yBytes * 3 + 1) -- wtf lol
+
+        direction = do
+          newPreyDirection <- getPreyDirection
+          return $ \p -> p { upDirection = Just newPreyDirection }
+        currentAngle = do
+          newCurrentAngle <- getAngle
+          return $ \p -> p { upCurrentAngle = Just newCurrentAngle }
+        wantedAngle = do
+          newWantedAngle <- getAngle
+          return $ \p -> p { upWantedAngle = Just newWantedAngle }
+        speed = do
+          newSpeed <- getPreySpeed
+          return $ \p -> p { upSpeed = Just newSpeed }
+
+        getPreyUpdate [] acc = return acc
+        getPreyUpdate (update : rest) acc = do
+          updateFunction <- update
+          getPreyUpdate rest (updateFunction acc)
+
+        preyUpdate updates =
+          getPreyUpdate updates UpdatePrey
+          { upPreyId = preyId
+          , upPosition = newPosition
+          , upDirection = Nothing
+          , upCurrentAngle = Nothing
+          , upWantedAngle = Nothing
+          , upSpeed = Nothing
+          }
+
+      updatePrey <- case inputLength of
+        11 -> preyUpdate [speed]
+        12 -> preyUpdate [currentAngle]
+        13 -> preyUpdate [direction, wantedAngle]
+        14 -> preyUpdate [currentAngle, speed]
+        15 -> preyUpdate [direction, wantedAngle, speed]
+        16 -> preyUpdate [direction, currentAngle, wantedAngle]
+        18 -> preyUpdate [direction, currentAngle, wantedAngle, speed]
+        _ -> fail ("Invalid prey update packet length " ++ show inputLength)
+
+      return (MTUpdatePrey updatePrey)
 
     'y' -> do
       case inputLength of
@@ -486,10 +523,17 @@ getMessageType inputLength = do
         _ -> do
           fail ("Invalid input size for add/remove prey " ++ show inputLength)
 
+    other -> return (MTUnhandled other)
+
+getPreySpeed :: Get Double
+getPreySpeed = do
+  speedBytes <- i16
+  return (speedBytes / 1000)
+
 getPreyDirection :: Get PreyDirection
 getPreyDirection = do
   directionByte <- i8
-  case directionByte - 48 of
+  case directionByte - 48 :: Word8 of
     0 -> return NotTurning
     1 -> return TurningClockwise
     2 -> return TurningCounterClockwise
