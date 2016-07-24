@@ -32,86 +32,13 @@ import           Data.Fixed (mod')
 import           SlitherBot.Ai
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
+import           SlitherBot.UtilityGrid
 
 data AvoidAiState = AvoidAiState
   { aasCurrentAngle :: !Double
   , aasLastCandidates :: ![(Double, Double)]
   , aasUtilityGrid :: !UtilityGrid
   }
-
-type UgiRes = 256
-
-ugiRes :: Int32
-ugiRes = fromIntegral (natVal (Proxy :: Proxy UgiRes))
-
-ugiSize :: Double
-ugiSize = 2000
-
--- Length: ugiEdge * ugiEdge
-type UtilityGrid      = CV.Mat    (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Float)
-type MutUtilityGrid s = CV.MutMat (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Float) s
-
-emptyUtilityGrid :: CV.CvExceptT (ST s) (MutUtilityGrid s)
-emptyUtilityGrid = do
-  CV.mkMatM
-    (Proxy :: Proxy '[UgiRes, UgiRes])
-    (Proxy :: Proxy 1)
-    (Proxy :: Proxy Float)
-    (pure 0 :: V4 Double)
-
-snakeBodyPartRadius :: Double
-snakeBodyPartRadius = 100
-
-foodRadius :: Double
-foodRadius = 20
-
-blurRadius :: Double
-blurRadius = 500
-
-utilityGrid :: SnakeId -> Position -> GameState -> UtilityGrid
-utilityGrid ourSnakeId ourPosition GameState{..} =
-  CV.exceptError $ do
-    snakesAndFood :: UtilityGrid <- CV.createMat $ do
-      mutMat <- emptyUtilityGrid
-      forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
-        when (snakeId /= ourSnakeId) $
-          forM_ (snakePosition : toList snakeBody) $ \pos ->
-            forM_ (gridIndex ourPosition pos) $ \ix ->
-              CV.circle mutMat
-                ix
-                (sizeToPixels snakeBodyPartRadius)
-                (pure 1 :: V4 Double)
-                (-1)
-                CV.LineType_8
-                0
-      forM_ gsFoods $ \Food{..} ->  do
-        forM_ (gridIndex ourPosition foodPosition) $ \ix -> do
-          let foodUtility = (-0.1) - (foodValue / 100)
-          CV.circle mutMat
-            ix
-            (sizeToPixels foodRadius)
-            (pure foodUtility :: V4 Double)
-            (-1)
-            CV.LineType_8
-            0
-      return mutMat
-    -- .|. 1 makes the kernel size odd
-    blurredSnakesAndFood <-
-      CV.gaussianBlur (pure (sizeToPixels blurRadius .|. 1) :: V2 Int32) 0 0 snakesAndFood
-    return blurredSnakesAndFood
-
--- From Position to an index in the UtilityGrid
-gridIndex :: Position -> Position -> Maybe (V2 Int32)
-gridIndex ourPosition pos = do
-  let o = ourPosition ^-^ pure (ugiSize / 2)
-  let gridPos = (pos ^-^ o) ^* (fromIntegral ugiRes / ugiSize)
-  let gridPosIntegral = floor <$> gridPos
-  guard (gridPosIntegral ^. _x < ugiRes && gridPosIntegral ^. _y < ugiRes)
-  guard (gridPosIntegral ^. _x >= 0 && gridPosIntegral ^. _y >= 0)
-  return gridPosIntegral
-
-sizeToPixels :: (Integral a) => Double -> a
-sizeToPixels size = round (size * fromIntegral ugiRes / ugiSize)
 
 possibleTurns :: [Double]
 possibleTurns =
@@ -122,11 +49,6 @@ possibleTurns =
 
 lookaheadDistance :: Double 
 lookaheadDistance = 400
-
-utilityGridLookup :: UtilityGrid -> V2 Int32 -> Double
-utilityGridLookup ug ix = runST $ do
-  mug <- CV.Unsafe.unsafeThaw ug
-  CV.Unsafe.unsafeRead mug (map fromIntegral (reverse (toList ix)))
 
 pathUtility ::
      AvoidAiState

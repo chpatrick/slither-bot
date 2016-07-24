@@ -16,7 +16,7 @@ import           Control.Exception.Safe (tryAny)
 import           Data.Void (absurd)
 
 import           SlitherBot.Ai
-import           SlitherBot.Ai.Avoid
+import           SlitherBot.Ai.Search
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
 
@@ -26,7 +26,7 @@ proxy serverPort = do
   aiStateVar <- newTVarIO (aiInitialState ai)
   Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions (wsApp aiStateVar) (backupApp aiStateVar))
   where
-    ai = avoidAi
+    ai = searchAi
 
     wsApp aiStateVar pendingConn = do
       let reqHead = WS.pendingRequest pendingConn
