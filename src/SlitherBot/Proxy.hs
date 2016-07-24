@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts #-}
 module SlitherBot.Proxy (proxy) where
 
 import           ClassyPrelude
@@ -23,12 +24,12 @@ import           SlitherBot.GameState
 -- Path:
 proxy :: Int -> IO ()
 proxy serverPort = do
-  aiStateVar <- newTVarIO (aiInitialState ai)
-  Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions (wsApp aiStateVar) (backupApp aiStateVar))
+  aiStateRef <- newIORef (aiInitialState ai)
+  Warp.run serverPort (WS.websocketsOr WS.defaultConnectionOptions (wsApp aiStateRef) (backupApp aiStateRef))
   where
     ai = searchAi
 
-    wsApp aiStateVar pendingConn = do
+    wsApp aiStateRef pendingConn = do
       let reqHead = WS.pendingRequest pendingConn
       let couldNotParseURI = do
             WS.rejectRequest pendingConn "Could not parse URI"
@@ -62,11 +63,9 @@ proxy serverPort = do
 
           aiLoop mbPrevOutput = do
             gameState <- readMVar gameStateVar
-            output <- atomically $ do
-              state <- readTVar aiStateVar
-              let (output, nextState) = aiUpdate ai gameState state
-              writeTVar aiStateVar nextState
-              return output
+            output <- atomicModifyIORef' aiStateRef $ \state -> let
+              (output, nextState) = aiUpdate ai gameState state
+              in (nextState, output)
             when ((aoAngle <$> mbPrevOutput) /= Just (aoAngle output)) $
               WS.sendBinaryData serverConn (serializeClientMessage (SetAngle (aoAngle output)))
             let speedMsg = if aoSpeedup output
@@ -96,8 +95,8 @@ proxy serverPort = do
           putStrLn ("EXCEPTION quitting " ++ tshow exc')
         Right x -> absurd x
 
-    backupApp aiStateVar _req cont = do
-      aiState <- atomically (readTVar aiStateVar)
+    backupApp aiStateRef _req cont = do
+      aiState <- readIORef aiStateRef
       let statusHtml = do
             Lucid.html_ $ do
               Lucid.body_ $ do
