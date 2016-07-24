@@ -3,6 +3,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE LambdaCase #-}
 module SlitherBot.Ai.Avoid
   ( AvoidAiState
   , avoidAi
@@ -10,6 +11,7 @@ module SlitherBot.Ai.Avoid
 
 import           ClassyPrelude hiding (toList)
 import           Data.Foldable (toList)
+import           Prelude (iterate)
 import           Control.Lens ((^.))
 import           Linear hiding (angle)
 import qualified Linear
@@ -58,7 +60,7 @@ emptyUtilityGrid = do
     (pure 0 :: V4 Double)
 
 snakeBodyPartRadius :: Double
-snakeBodyPartRadius = 30
+snakeBodyPartRadius = 100
 
 foodRadius :: Double
 foodRadius = 20
@@ -84,7 +86,7 @@ utilityGrid ourSnakeId ourPosition GameState{..} =
                 0
       forM_ gsFoods $ \Food{..} ->  do
         forM_ (gridIndex ourPosition foodPosition) $ \ix -> do
-          let foodUtility = (-0.5) - (foodValue / 100)
+          let foodUtility = (-0.1) - (foodValue / 100)
           CV.circle mutMat
             ix
             (sizeToPixels foodRadius)
@@ -119,12 +121,12 @@ possibleTurns =
     turns = [ix * (maxTurn / 10) | ix <- [1..10]]
 
 lookaheadDistance :: Double 
-lookaheadDistance = 600
+lookaheadDistance = 400
 
 utilityGridLookup :: UtilityGrid -> V2 Int32 -> Double
 utilityGridLookup ug ix = runST $ do
   mug <- CV.Unsafe.unsafeThaw ug
-  CV.Unsafe.unsafeRead mug (map fromIntegral (toList ix))
+  CV.Unsafe.unsafeRead mug (map fromIntegral (reverse (toList ix)))
 
 pathUtility ::
      AvoidAiState
@@ -133,7 +135,7 @@ pathUtility ::
   -- ^ Angle in radians
   -> Double
 pathUtility AvoidAiState{..} startPos angle =
-  sum (map (utilityGridLookup aasUtilityGrid) indices)
+  sum (zipWith (*) (map (utilityGridLookup aasUtilityGrid) indices) (iterate (/ 1.2) 1))
   where
     indices = catMaybes (map (gridIndex startPos) poss)
     poss = 
@@ -157,6 +159,18 @@ angleCandidates pos aas@AvoidAiState{..} turns = utilities
 
 bestAngle :: [(Double, Double)] -> Double
 bestAngle = fst . minimumByEx (comparing snd)
+
+normalizeMinMax :: [Double] -> [Double]
+normalizeMinMax = \case
+  [] -> []
+  xs -> let
+    minXs = minimumEx xs
+    maxXs = maximumEx xs
+    span = maxXs - minXs
+    in
+      [ (x - minXs) / span
+      | x <- xs
+      ]
 
 avoidAi :: Ai AvoidAiState
 avoidAi = Ai
@@ -186,15 +200,16 @@ avoidAi = Ai
               rgbWithAngle <- CV.createMat $ do
                 mutRgb <- CV.thaw rgb
                 let startPoint :: V2 Int32 = pure (ugiRes `div` 2)
-                forM_ aasLastCandidates $ \(angle, goodNess) -> do
+                let utilities = map snd aasLastCandidates
+                let utilitiesColors = map ((*255) . (\x -> 1 - x)) (normalizeMinMax utilities)
+                forM_ (zip (map fst aasLastCandidates) utilitiesColors) $ \(angle, color) -> do
                   let endPoint :: V2 Int32 =
                         round <$> ((fromIntegral <$> startPoint) + Linear.angle angle ^* pixelLength)
-                  let blue = (1 - (goodNess + 1)/2) * 255
                   CV.line
                     mutRgb
                     startPoint
                     endPoint
-                    (V4 blue 0 0 255 :: V4 Double)
+                    (V4 0 color (255 - color) 255 :: V4 Double)
                     2
                     CV.LineType_4
                     0
