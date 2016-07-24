@@ -21,17 +21,28 @@ data GameState = GameState
   , gsSetup :: !Setup
   , gsOwnSnake :: !(Maybe SnakeId)
   , gsFoods :: !(HMS.HashMap Position Food)
+  , gsPreys :: !(HMS.HashMap PreyId Prey)
   } deriving (Eq, Show)
 
 defaultGameState :: GameState
-defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup, gsOwnSnake = Nothing, gsFoods = mempty }
+defaultGameState = GameState{ gsSnakes = mempty, gsSetup = defaultSetup, gsOwnSnake = Nothing, gsFoods = mempty, gsPreys = mempty }
 
-data Snake = Snake
+data Snake =
+  Snake
   { snakePosition :: !Position
   , snakeDirection :: !Direction
   , snakeFam :: !Fam
   , snakeBody :: !SnakeBody
-  } deriving (Eq, Show)
+  }
+  deriving (Eq, Show)
+
+data Prey =
+  Prey
+  { preyPosition :: !Position
+  , preyDirection :: !Direction
+  , preySpeed :: !Double
+  }
+  deriving (Eq, Show)
 
 -- TODO change this super slow data structure
 type SnakeBody = Seq.Seq Position
@@ -91,7 +102,30 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
   MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
   MTAddFood AddFood{..} -> return (Just gs{gsFoods = foldr (\food -> HMS.insert (foodPosition food) food) gsFoods afFoods})
   MTRemoveFood RemoveFood{..} -> return (Just gs{gsFoods = HMS.delete rfPosition gsFoods})
+  MTAddPrey AddPrey{..} ->
+    let
+      prey =
+        Prey
+        { preyPosition = apPosition
+        , preyDirection = apCurrentAngle
+        , preySpeed = apSpeed
+        }
+    in return (Just gs{gsPreys = HMS.insert apPreyId prey gsPreys})
+  MTRemovePrey RemovePrey{..} -> return (Just gs{gsPreys = HMS.delete rpPreyId gsPreys})
+  MTUpdatePrey UpdatePrey{..} ->
+    let
+      updateFun =
+        updatePrey
+        [ (upCurrentAngle, \angle p -> p { preyDirection = angle })
+        , (upSpeed, \speed p -> p { preySpeed = speed })
+        ]
+    in return (Just gs{gsPreys = HMS.adjust updateFun upPreyId gsPreys})
   where
     getSnake snakeId = case HMS.lookup snakeId gsSnakes of
       Nothing -> Left ("Could not find snake " ++ show snakeId)
       Just snake -> Right snake
+
+updatePrey :: [(Maybe a, a -> b -> b)] -> b -> b
+updatePrey [] acc = acc
+updatePrey ((Nothing, _) : rest) acc = updatePrey rest acc
+updatePrey ((Just a, f) : rest) acc = updatePrey rest (f a acc)

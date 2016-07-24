@@ -130,32 +130,32 @@ data PreyDirection
 
 data AddPrey =
   AddPrey
-  { apPreyId :: PreyId
-  , apColor :: Word8
-  , apPosition :: Position
-  , apSize :: Double
-  , apDirection :: PreyDirection
-  , apWantedAngle :: Double
-  , apCurrentAngle :: Double
-  , apSpeed :: Double
+  { apPreyId :: !PreyId
+  , apColor :: !Word8
+  , apPosition :: !Position
+  , apSize :: !Double
+  , apDirection :: !PreyDirection
+  , apWantedAngle :: !Direction
+  , apCurrentAngle :: !Direction
+  , apSpeed :: !Double
   }
   deriving (Eq, Show)
 
 data UpdatePrey =
   UpdatePrey
-  { upPreyId :: PreyId
-  , upPosition :: Position
-  , upDirection :: Maybe PreyDirection
-  , upCurrentAngle :: Maybe Double
-  , upWantedAngle :: Maybe Double
-  , upSpeed :: Maybe Double
+  { upPreyId :: !PreyId
+  , upPosition :: !Position
+  , upDirection :: !(Maybe PreyDirection)
+  , upCurrentAngle :: !(Maybe Direction)
+  , upWantedAngle :: !(Maybe Direction)
+  , upSpeed :: !(Maybe Double)
   }
   deriving (Eq, Show)
 
 data RemovePrey =
   RemovePrey
-  { rpPreyId :: PreyId
-  , rpEaterSnakeId :: Maybe SnakeId
+  { rpPreyId :: !PreyId
+  , rpEaterSnakeId :: !(Maybe SnakeId)
   }
   deriving (Eq, Show)
 
