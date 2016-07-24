@@ -39,7 +39,7 @@ packages:
 - '.'
 - location:
     git: git@github.com:bitonic/haskell-opencv.git
-    commit: 99d053059e0b2e82866ee5067b614a07a6d7d730
+    commit: 37d86006640c54dc9b2d071541719c768b9cd6ec
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)
 extra-deps:

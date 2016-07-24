@@ -162,8 +162,8 @@ searchAi = Ai
       Lucid.p_ (fromString (show (length sasChosenPath)))
       let encodedImg =
             CV.exceptError $ do
-              colorNormalized :: UtilityGrid <- CV.normalize 0 255 CV.Norm_MinMax Nothing sasUtilityGrid
-              rgb <- CV.cvtColor CV.gray CV.rgb colorNormalized
+              normalized :: CV.Mat (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Word8) <- CV.matConvertTo (Just 128) (Just 128) sasUtilityGrid
+              rgb <- CV.applyColorMap CV.ColorMapJet normalized
               rgbWithAngle <- CV.createMat $ do
                 mutRgb <- CV.thaw rgb
                 case sasChosenPath of
