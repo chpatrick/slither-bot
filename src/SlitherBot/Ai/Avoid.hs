@@ -14,13 +14,14 @@ import           Linear
 import qualified OpenCV as CV
 import           Data.Proxy (Proxy(..))
 import           GHC.TypeLits
-import           Control.Monad.ST (ST)
-import           Control.Monad.Except (runExcept)
+import           Control.Monad.ST (ST, runST)
+import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Linear.V4 (V4)
 import qualified Data.HashMap.Strict as HMS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as T
 import qualified Lucid.Html5 as Lucid
+import           Data.Bits ((.|.))
 
 import           SlitherBot.Ai
 import           SlitherBot.Protocol
@@ -53,27 +54,52 @@ emptyUtilityGrid = do
     (Proxy :: Proxy '[UgiRes, UgiRes])
     (Proxy :: Proxy 1)
     (Proxy :: Proxy Double)
-    (pure 0.5 :: V4 Double)
+    (pure 0 :: V4 Double)
 
 snakeBodyPartRadius :: Double
-snakeBodyPartRadius = 20
+snakeBodyPartRadius = 30
+
+foodRadius :: Double
+foodRadius = 20
+
+blurRadius :: Double
+blurRadius = 500
 
 utilityGrid :: UtilityGridInfo -> SnakeId -> Snake -> GameState -> UtilityGrid
 utilityGrid UtilityGridInfo{..} ourSnakeId ourSnake GameState{..} =
-  CV.exceptError $ CV.createMat $ do
-    mutMat <- emptyUtilityGrid
-    forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
-      when (snakeId /= ourSnakeId) $
-        forM_ (snakePosition : toList snakeBody) $ \pos ->
-          forM_ (gridIndex pos) $ \ix ->
-            CV.circle mutMat
-              ix
-              (sizeToPixels snakeBodyPartRadius)
-              (pure 1 :: V4 Double)
-              (-1)
-              CV.LineType_8
-              0
-    return mutMat
+  CV.exceptError $ do
+    snakesAndFood :: UtilityGrid <- CV.createMat $ do
+      mutMat <- emptyUtilityGrid
+      forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
+        when (snakeId /= ourSnakeId) $
+          forM_ (snakePosition : toList snakeBody) $ \pos ->
+            forM_ (gridIndex pos) $ \ix ->
+              CV.circle mutMat
+                ix
+                (sizeToPixels snakeBodyPartRadius)
+                (pure 1 :: V4 Double)
+                (-1)
+                CV.LineType_8
+                0
+      forM_ gsFoods $ \Food{..} ->  do
+        forM_ (gridIndex foodPosition) $ \ix -> do
+          let foodUtility = (-0.5) - (foodValue / 100)
+          CV.circle mutMat
+            ix
+            (sizeToPixels foodRadius)
+            (pure foodUtility :: V4 Double)
+            (-1)
+            CV.LineType_8
+            0
+      return mutMat
+    -- .|. 1 makes the kernel size odd
+    blurredSnakesAndFood <-
+      CV.gaussianBlur (pure (sizeToPixels blurRadius .|. 1) :: V2 Int32) 0 0 snakesAndFood
+    {-
+    -- We make sure that snake bodies are super bad
+    return (CV.matMax blurredSnakesAndFood snakes)
+    -}
+    return blurredSnakesAndFood
   where
     -- From Position to an index in the UtilityGrid
     gridIndex :: Position -> Maybe (V2 Int32)

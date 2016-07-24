@@ -208,7 +208,7 @@ data Food
   = Food
     { foodColor :: !Word8
     , foodPosition :: !Position
-    , foodValue :: !Double
+    , foodValue :: !Double -- 0 to 50
     }
   deriving (Eq, Ord, Show)
 
