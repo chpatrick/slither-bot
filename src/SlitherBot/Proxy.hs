@@ -20,7 +20,7 @@ import           SlitherBot.Ai.Search
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
 
--- Path: 
+-- Path:
 proxy :: Int -> IO ()
 proxy serverPort = do
   aiStateVar <- newTVarIO (aiInitialState ai)
@@ -102,5 +102,5 @@ proxy serverPort = do
             Lucid.html_ $ do
               Lucid.body_ $ do
                 aiHtmlStatus ai aiState
-                Lucid.script_ "setTimeout(function() { location.reload(); }, 250)"
+                Lucid.script_ "setTimeout(function() { location.reload(); }, 500)"
       cont (Wai.responseLBS Http.status200 [] (Lucid.renderBS statusHtml))

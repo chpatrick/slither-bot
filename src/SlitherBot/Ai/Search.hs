@@ -47,14 +47,17 @@ type Utility = Double
 type Angle = Double
 type Distance = Double
 
-stepDistance :: Distance
-stepDistance = 100
+firstStepDistance :: Distance
+firstStepDistance = 50
+
+stepDistanceDelta :: Distance
+stepDistanceDelta = 20
 
 branchingFactor :: Int
 branchingFactor = 5
 
 treeDepth :: Int
-treeDepth = 5
+treeDepth = 4
 
 branchUtilityCutoff :: Utility
 branchUtilityCutoff = 0.5
@@ -77,13 +80,14 @@ data StepState = StepState
 possibleStepStates :: StepState -> [StepState]
 possibleStepStates StepState{..} =
     [ StepState
-        { ssPosition = ssPosition + Linear.angle angle ^* stepDistance
+        { ssPosition = ssPosition + Linear.angle angle ^* distance
         , ssDirection = angle
         , ssStepsTaken = ssStepsTaken + 1
         }
     | angle <- angles
     ]
   where
+    distance = firstStepDistance + stepDistanceDelta * fromIntegral ssStepsTaken
     angles =
       [ mod' (ssDirection + turn) (2 * pi)
       | turn <- possibleTurns
@@ -91,6 +95,18 @@ possibleStepStates StepState{..} =
 
 speedupThreshold :: Utility
 speedupThreshold = 4.999999 / 5
+
+getPath :: V2 Int32 -> V2 Int32 -> [V2 Int32]
+getPath startPos endPos =
+  let
+    numberOfSamples :: Int32
+    numberOfSamples = floor (distance (fromIntegral <$> startPos) (fromIntegral <$> endPos) :: Double)
+    step :: V2 Double
+    step = (fromIntegral <$> (endPos - startPos)) ^/ fromIntegral numberOfSamples
+  in
+    [ startPos + (floor <$> fromIntegral x *^ step)
+    | x <- [ 1 .. numberOfSamples :: Int32 ]
+    ]
 
 findBestAngle :: UtilityGrid -> Position -> StepState -> Maybe (Utility, [StepState])
 findBestAngle ug0 ourPosition0 ss0 =
@@ -104,12 +120,15 @@ findBestAngle ug0 ourPosition0 ss0 =
         then return (ss : pathSoFar)
         else asum
           [ do
-              let cost = 1 + max (-1) (utilityGridLookup ug ix)
+              let
+                costs = map (\ix -> 1 + max (-1) (utilityGridLookup ug ix)) (getPath startIndex endIndex)
+                cost = sum costs / (fromIntegral (length costs))
               -- guard (cost < branchUtilityCutoff + 1)
               Search.cost' (Sum cost)
               go (ss' : pathSoFar) ug ourPosition ss'
           | ss' <- possibleStepStates ss
-          , ix <- toList (gridIndex ourPosition (ssPosition ss'))
+          , endIndex <- toList (gridIndex ourPosition (ssPosition ss'))
+          , startIndex <- toList (gridIndex ourPosition (ssPosition ss))
           ]
 
 {-

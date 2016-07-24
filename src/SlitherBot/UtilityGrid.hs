@@ -59,7 +59,7 @@ foodRadius :: Double
 foodRadius = 20
 
 blurRadius :: Double
-blurRadius = 500
+blurRadius = 400
 
 snakeBodyPrediction :: Position -> SnakeBody -> [Position]
 snakeBodyPrediction snakePosition snakeBody = let

@@ -101,7 +101,9 @@ updateGameState gs@GameState{..} ServerMessage{..} = case smMessageType of
     in return (Just gs{gsSnakes = HMS.insert asSnakeId snake gsSnakes, gsOwnSnake = ownSnake})
   MTRemoveSnake RemoveSnake{..} -> return (Just gs{gsSnakes = HMS.delete rsSnakeId gsSnakes})
   MTAddFood AddFood{..} -> return (Just gs{gsFoods = foldr (\food -> HMS.insert (foodPosition food) food) gsFoods afFoods})
-  MTRemoveFood RemoveFood{..} -> return (Just gs{gsFoods = HMS.delete rfPosition gsFoods})
+  MTRemoveFood RemoveFood{..} -> do
+    when (isNothing (HMS.lookup rfPosition gsFoods)) (traceM ("FOOD NOT FOUND " ++ show rfPosition))
+    return (Just gs{gsFoods = HMS.delete rfPosition gsFoods})
   MTAddPrey AddPrey{..} ->
     let
       prey =
