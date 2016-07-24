@@ -9,28 +9,19 @@ module SlitherBot.Ai.Search
   , searchAi
   ) where
 
-import           ClassyPrelude hiding (toList)
-import           Data.Foldable (toList)
-import           Prelude (iterate)
 import           Data.Monoid (Sum(..))
-import           Control.Lens ((^.))
 import           Linear hiding (angle, trace)
 import qualified Linear
 import qualified OpenCV as CV
-import           Data.Proxy (Proxy(..))
-import           GHC.TypeLits
-import           Control.Monad.ST (ST, runST)
-import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Linear.V4 (V4)
 import qualified Data.HashMap.Strict as HMS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as T
 import qualified Lucid.Html5 as Lucid
-import           Data.Bits ((.|.))
-import qualified OpenCV.Unsafe as CV.Unsafe
 import           Data.Fixed (mod')
 import qualified Control.Monad.Search as Search
 
+import           SlitherBot.Prelude
 import           SlitherBot.Ai
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
@@ -50,8 +41,8 @@ type Distance = Double
 firstStepDistance :: Distance
 firstStepDistance = 50
 
-stepDistanceDelta :: Distance
-stepDistanceDelta = 20
+stepDistanceIncreaseFactor :: Double
+stepDistanceIncreaseFactor = 2
 
 branchingFactor :: Int
 branchingFactor = 5
@@ -59,8 +50,8 @@ branchingFactor = 5
 treeDepth :: Int
 treeDepth = 4
 
-branchUtilityCutoff :: Utility
-branchUtilityCutoff = 0.5
+-- branchUtilityCutoff :: Utility
+-- branchUtilityCutoff = 0.5
 
 possibleTurns :: [Angle]
 possibleTurns =
@@ -80,14 +71,14 @@ data StepState = StepState
 possibleStepStates :: StepState -> [StepState]
 possibleStepStates StepState{..} =
     [ StepState
-        { ssPosition = ssPosition + Linear.angle angle ^* distance
+        { ssPosition = ssPosition + Linear.angle angle ^* dist
         , ssDirection = angle
         , ssStepsTaken = ssStepsTaken + 1
         }
     | angle <- angles
     ]
   where
-    distance = firstStepDistance + stepDistanceDelta * fromIntegral ssStepsTaken
+    dist = lastEx (take (ssStepsTaken + 1) (iterate (* stepDistanceIncreaseFactor) firstStepDistance))
     angles =
       [ mod' (ssDirection + turn) (2 * pi)
       | turn <- possibleTurns

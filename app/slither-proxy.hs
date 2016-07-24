@@ -1,4 +1,5 @@
 import SlitherBot.Proxy
+import SlitherBot.Prelude
 
 main :: IO ()
-main = proxy 1337
+main = runStdoutLoggingT (filterLogger (\_ ll -> ll >= LevelInfo) (proxy 1337))

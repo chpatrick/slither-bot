@@ -9,26 +9,18 @@ module SlitherBot.Ai.Avoid
   , avoidAi
   ) where
 
-import           ClassyPrelude hiding (toList)
-import           Data.Foldable (toList)
 import           Prelude (iterate)
-import           Control.Lens ((^.))
 import           Linear hiding (angle)
 import qualified Linear
 import qualified OpenCV as CV
-import           Data.Proxy (Proxy(..))
-import           GHC.TypeLits
-import           Control.Monad.ST (ST, runST)
-import           Control.Monad.Except (runExceptT, ExceptT(..))
 import           Linear.V4 (V4)
 import qualified Data.HashMap.Strict as HMS
 import qualified Data.ByteString.Base64 as Base64
 import qualified Data.Text.Encoding as T
 import qualified Lucid.Html5 as Lucid
-import           Data.Bits ((.|.))
-import qualified OpenCV.Unsafe as CV.Unsafe
 import           Data.Fixed (mod')
 
+import           SlitherBot.Prelude hiding (span)
 import           SlitherBot.Ai
 import           SlitherBot.Protocol
 import           SlitherBot.GameState

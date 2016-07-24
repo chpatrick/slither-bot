@@ -4,13 +4,9 @@ module SlitherBot.Ai
   , Ai(..)
   ) where
 
-import           SlitherBot.GameState
-import           SlitherBot.Protocol
 import qualified Lucid
 
-import qualified Data.HashMap.Strict as HMS
-import qualified Data.Sequence as Seq
-import           Data.Fixed
+import           SlitherBot.GameState
 
 data AiOutput = AiOutput
   { aoAngle :: !Double
