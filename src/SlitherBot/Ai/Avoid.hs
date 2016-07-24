@@ -43,8 +43,6 @@ data UtilityGridInfo = UtilityGridInfo
 utilityGridInfo :: UtilityGridInfo
 utilityGridInfo = UtilityGridInfo{ugiSize = 2000}
 
-type Utility = Double
-
 -- Length: ugiEdge * ugiEdge
 type UtilityGrid      = CV.Mat    (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Double)
 type MutUtilityGrid s = CV.MutMat (CV.ShapeT '[UgiRes, UgiRes]) ('CV.S 1) ('CV.S Double) s
@@ -55,7 +53,7 @@ emptyUtilityGrid = do
     (Proxy :: Proxy '[UgiRes, UgiRes])
     (Proxy :: Proxy 1)
     (Proxy :: Proxy Double)
-    (pure 128 :: V4 Double)
+    (pure 0.5 :: V4 Double)
 
 snakeBodyPartRadius :: Double
 snakeBodyPartRadius = 20
@@ -65,13 +63,13 @@ utilityGrid UtilityGridInfo{..} ourSnakeId ourSnake GameState{..} =
   CV.exceptError $ CV.createMat $ do
     mutMat <- emptyUtilityGrid
     forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
-      -- when (snakeId /= ourSnakeId) $
+      when (snakeId /= ourSnakeId) $
         forM_ (snakePosition : toList snakeBody) $ \pos ->
           forM_ (gridIndex pos) $ \ix ->
             CV.circle mutMat
               ix
               (sizeToPixels snakeBodyPartRadius)
-              (pure 255 :: V4 Double)
+              (pure 1 :: V4 Double)
               (-1)
               CV.LineType_8
               0
@@ -103,7 +101,9 @@ avoidAi = Ai
   , aiHtmlStatus = \AvoidAiState{..} -> do
       Lucid.p_ (fromString (show aasCurrentAngle))
       let encodedImg =
-            CV.exceptError (CV.imencode (CV.OutputPng CV.defaultPngParams{CV.pngParamCompression = 0}) aasUtilityGrid)
+            CV.exceptError $ do
+              colorGrid :: UtilityGrid <- CV.normalize 0 255 CV.Norm_MinMax Nothing aasUtilityGrid
+              CV.imencode (CV.OutputPng CV.defaultPngParams{CV.pngParamCompression = 0}) colorGrid
       Lucid.img_
         [ Lucid.alt_ "Utility grid"
         , Lucid.src_ ("data:image/png;base64," <> T.decodeUtf8 (Base64.encode encodedImg))
