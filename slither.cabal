@@ -21,6 +21,7 @@ library
                      , SlitherBot.Ai
                      , SlitherBot.Ai.Circle
                      , SlitherBot.Ai.Avoid
+                     , SlitherBot.Ai.AvoidSearch
   default-language:    Haskell2010
   build-depends:       base
                      , cereal
@@ -46,6 +47,7 @@ library
                      , text
                      , base64-bytestring
                      , safe-exceptions
+                     , monad-dijkstra
   ghc-options:         -Wall
   default-language:    Haskell2010
 

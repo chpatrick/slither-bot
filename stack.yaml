@@ -46,6 +46,7 @@ extra-deps:
 - inline-c-cpp-0.1.0.0
 - repa-3.4.1.1
 - inline-c-0.5.5.5
+- monad-dijkstra-0.1.0.0
 # Override default flag values for local packages and extra-deps
 flags: {}
 
