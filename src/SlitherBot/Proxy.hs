@@ -69,13 +69,10 @@ proxy serverPort = do
               return output
             when ((aoAngle <$> mbPrevOutput) /= Just (aoAngle output)) $
               WS.sendBinaryData serverConn (serializeClientMessage (SetAngle (aoAngle output)))
-            case (aoSpeedup <$> mbPrevOutput, aoSpeedup output) of
-              (Nothing, False) -> return ()
-              (Just x, y) -> when (x /= y) $ do
-                let msg = if aoSpeedup output then EnterSpeed else LeaveSpeed
-                WS.sendBinaryData serverConn (serializeClientMessage msg)
-              (Nothing, True) -> do
-                WS.sendBinaryData serverConn (serializeClientMessage EnterSpeed)
+            let speedMsg = if aoSpeedup output
+                  then EnterSpeed
+                  else LeaveSpeed
+            WS.sendBinaryData serverConn (serializeClientMessage speedMsg)
             threadDelay (250 * 1000)
             aiLoop (Just output)
 
@@ -88,7 +85,7 @@ proxy serverPort = do
                   putStrLn $ "Couldn't parse " ++ tshow msg ++ ": " ++ pack err
                   return gameState
                 Right serverMsg -> do
-                  putStrLn ("SERVER " ++ tshow serverMsg)
+                  -- putStrLn ("SERVER " ++ tshow serverMsg)
                   case updateGameState gameState serverMsg of
                     Left err -> fail ("Couldn't update game state: " ++ err)
                     Right Nothing -> return gameState

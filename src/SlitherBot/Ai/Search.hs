@@ -89,6 +89,9 @@ possibleStepStates StepState{..} =
       | turn <- possibleTurns
       ]
 
+speedupThreshold :: Utility
+speedupThreshold = 4.999999 / 5
+
 findBestAngle :: UtilityGrid -> Position -> StepState -> Maybe (Utility, [StepState])
 findBestAngle ug0 ourPosition0 ss0 =
   case Search.runSearch (go [] ug0 ourPosition0 ss0) of
@@ -102,7 +105,7 @@ findBestAngle ug0 ourPosition0 ss0 =
         else asum
           [ do
               let cost = 1 + max (-1) (utilityGridLookup ug ix)
-              guard (cost < branchUtilityCutoff + 1)
+              -- guard (cost < branchUtilityCutoff + 1)
               Search.cost' (Sum cost)
               go (ss' : pathSoFar) ug ourPosition ss'
           | ss' <- possibleStepStates ss
@@ -150,7 +153,10 @@ searchAi = Ai
             , sasChosenPathUtility = utility
             , sasChosenPath = bestPath
             }
-          in (AiOutput bestAngle False, sas')
+          speedup =
+            not (null bestPath) &&
+            utility / fromIntegral treeDepth < speedupThreshold
+          in (AiOutput bestAngle speedup, sas')
   , aiHtmlStatus = \SearchAiState{..} -> do
       Lucid.p_ (fromString (show sasChosenPathUtility))
       Lucid.p_ (fromString (show (length sasChosenPath)))

@@ -6,7 +6,7 @@
 {-# LANGUAGE LambdaCase #-}
 module SlitherBot.UtilityGrid where
 
-import           ClassyPrelude hiding (toList)
+import           ClassyPrelude hiding (toList, tail)
 import           Data.Foldable (toList)
 import           Control.Lens ((^.))
 import           Linear hiding (angle)
@@ -18,6 +18,8 @@ import           Control.Monad.ST (ST, runST)
 import           Linear.V4 (V4)
 import qualified Data.HashMap.Strict as HMS
 import           Data.Bits ((.|.))
+import qualified Data.Sequence as Seq
+import           Data.List (iterate, tail)
 
 import           SlitherBot.Protocol
 import           SlitherBot.GameState
@@ -48,13 +50,28 @@ emptyUtilityGrid = do
     (pure 0 :: V4 Double)
 
 snakeBodyPartRadius :: Double
-snakeBodyPartRadius = 100
+snakeBodyPartRadius = 70
+
+snakeBodyPredictionIncrease :: Double
+snakeBodyPredictionIncrease = 1.05
 
 foodRadius :: Double
 foodRadius = 20
 
 blurRadius :: Double
 blurRadius = 500
+
+snakeBodyPrediction :: Position -> SnakeBody -> [Position]
+snakeBodyPrediction snakePosition snakeBody = let
+  headPos = snakePosition
+  in case Seq.viewl snakeBody of
+    Seq.EmptyL -> []
+    previousPos Seq.:< _  -> let
+      movement = headPos - previousPos
+      in take predictedBodyParts (tail (iterate (+ movement) headPos))
+
+predictedBodyParts :: Int
+predictedBodyParts = 7
 
 utilityGrid :: SnakeId -> Position -> GameState -> UtilityGrid
 utilityGrid ourSnakeId ourPosition GameState{..} =
@@ -63,7 +80,7 @@ utilityGrid ourSnakeId ourPosition GameState{..} =
       mutMat <- emptyUtilityGrid
       forM_ gsFoods $ \Food{..} ->  do
         forM_ (gridIndex ourPosition foodPosition) $ \ix -> do
-          let foodUtility = (-0.1) - (foodValue / 100)
+          let foodUtility = (-0.5) - (foodValue / 100)
           CV.circle mutMat
             ix
             (sizeToPixels foodRadius)
@@ -72,12 +89,21 @@ utilityGrid ourSnakeId ourPosition GameState{..} =
             CV.LineType_8
             0
       forM_ (HMS.toList gsSnakes) $ \(snakeId, Snake{..}) -> do
-        when (snakeId /= ourSnakeId) $
+        when (snakeId /= ourSnakeId) $ do
           forM_ (snakePosition : toList snakeBody) $ \pos ->
             forM_ (gridIndex ourPosition pos) $ \ix ->
               CV.circle mutMat
                 ix
                 (sizeToPixels snakeBodyPartRadius)
+                (pure 1 :: V4 Double)
+                (-1)
+                CV.LineType_8
+                0
+          forM_ (zip (snakeBodyPrediction snakePosition snakeBody) (tail (iterate (* snakeBodyPredictionIncrease) 1))) $ \(pos, increase) ->
+            forM_ (gridIndex ourPosition pos) $ \ix ->
+              CV.circle mutMat
+                ix
+                (sizeToPixels (snakeBodyPartRadius * increase))
                 (pure 1 :: V4 Double)
                 (-1)
                 CV.LineType_8
