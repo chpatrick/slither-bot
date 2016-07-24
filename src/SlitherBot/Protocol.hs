@@ -40,6 +40,9 @@ import           Control.Lens ((^.))
 newtype SnakeId = SnakeId {unSnakeId :: Word16}
   deriving (Eq, Show, Hashable)
 
+newtype PreyId = PreyId {unPreyId :: Word16}
+  deriving (Eq, Show, Hashable)
+
 type Position = V2 Double
 
 data Setup = Setup
@@ -109,7 +112,47 @@ data MessageType
   | MTRemoveSnake !RemoveSnake
   | MTAddFood !AddFood
   | MTRemoveFood !RemoveFood
+  | MTAddPrey !AddPrey
+  | MTUpdatePrey !UpdatePrey
+  | MTRemovePrey !RemovePrey
   | MTGameOver
+  deriving (Eq, Show)
+
+data PreyDirection
+  = NotTurning
+  | TurningClockwise
+  | TurningCounterClockwise
+  deriving (Eq, Show)
+
+data AddPrey =
+  AddPrey
+  { apPreyId :: PreyId
+  , apColor :: Word8
+  , apPosition :: Position
+  , apSize :: Double
+  , apDirection :: PreyDirection
+  , apWantedAngle :: Double
+  , apCurrentAngle :: Double
+  , apSpeed :: Double
+  }
+  deriving (Eq, Show)
+
+data UpdatePrey =
+  UpdatePrey
+  { upPreyId :: PreyId
+  , upPosition :: Position
+  , upDirection :: Maybe PreyDirection
+  , upCurrentAngle :: Maybe Double
+  , upWantedAngle :: Maybe Double
+  , upSpeed :: Maybe Word8
+  }
+  deriving (Eq, Show)
+
+data RemovePrey =
+  RemovePrey
+  { rpPreyId :: PreyId
+  , rpEaterSnakeId :: Maybe SnakeId
+  }
   deriving (Eq, Show)
 
 data RemoveLastPart = RemoveLastPart
@@ -153,6 +196,7 @@ data AddFood =
 data RemoveFood =
   RemoveFood
   { rfPosition :: !Position
+  , rfSnakeId :: !SnakeId
   }
   deriving (Eq, Show)
 
@@ -203,6 +247,9 @@ unexpectedInputSize size = fail ("Unexpected input size " ++ show size)
 
 getSnakeId :: Get SnakeId
 getSnakeId = SnakeId <$> i16
+
+getPreyId :: Get PreyId
+getPreyId = PreyId <$> i16
 
 getPosition16 :: Get Position
 getPosition16 = do
@@ -394,20 +441,59 @@ getMessageType inputLength = do
     'b' -> do
       MTAddFood <$> getAddFood inputLength
 
+    'c' -> do
+      foodPosition <- getPosition16
+      snakeId <- getSnakeId
+      return (MTRemoveFood (RemoveFood foodPosition snakeId))
+
     'v' -> do -- game over
       unknown <- getWord8
       dbg "mystery code" unknown
       return MTGameOver
     other -> return (MTUnhandled other)
 
-    -- h | h `elem` ("eE345" :: String) -> do
-    --   t <- i16
-    --   e <- remaining
-    --   dbg "h" h
-    --   dbg "e" e
-    --   bytesLeft <- remaining
-    --   msgBody <- getBytes bytesLeft
-    --   return OtherMessage {..}
+    'y' -> do
+      case inputLength of
+        5 -> do
+          preyId <- getPreyId
+          return (MTRemovePrey (RemovePrey preyId Nothing))
+        7 -> do
+          preyId <- getPreyId
+          eaterSnakeId <- getSnakeId
+          return (MTRemovePrey (RemovePrey preyId (Just eaterSnakeId)))
+        22 -> do
+          preyId <- getPreyId
+          color <- i8
+          position <- getPosition5
+          sizeByte <- i8
+          direction <- getPreyDirection
+          wantedAngle <- getAngle
+          currentAngle <- getAngle
+          speedBytes <- i16
+          let
+            addPrey =
+              AddPrey
+              { apPreyId = preyId
+              , apColor = color
+              , apPosition = position
+              , apSize = sizeByte / 5
+              , apDirection = direction
+              , apWantedAngle = wantedAngle
+              , apCurrentAngle = currentAngle
+              , apSpeed = speedBytes / 1000
+              }
+          return (MTAddPrey addPrey)
+        _ -> do
+          fail ("Invalid input size for add/remove prey " ++ show inputLength)
+
+getPreyDirection :: Get PreyDirection
+getPreyDirection = do
+  directionByte <- i8
+  case directionByte - 48 of
+    0 -> return NotTurning
+    1 -> return TurningClockwise
+    2 -> return TurningCounterClockwise
+    _ -> fail ("Invalid prey direction byte " ++ show directionByte)
 
 getAddFood :: Int -> Get AddFood
 getAddFood inputLength = do
